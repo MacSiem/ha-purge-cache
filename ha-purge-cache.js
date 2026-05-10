@@ -510,6 +510,7 @@ class HAPurgeCache extends HTMLElement {
   getCardSize() { return 6; }
 
   static getStubConfig() { return { type: 'custom:ha-purge-cache', title: 'Purge Cache' }; }
+  setConfig(config) { this._config = config || {}; }
   constructor() {
     super();
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
