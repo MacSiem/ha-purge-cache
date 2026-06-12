@@ -699,6 +699,7 @@ if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
 class HAPurgeCache extends HTMLElement {
   static getConfigElement() { return document.createElement('ha-purge-cache-editor'); }
   getCardSize() { return 6; }
+  getGridOptions() { return { rows: 6, columns: 12, min_rows: 3, min_columns: 6 }; }
 
   static getStubConfig() { return { type: 'custom:ha-purge-cache', title: 'Purge Cache' }; }
   setConfig(config) { this._config = config || {}; }
