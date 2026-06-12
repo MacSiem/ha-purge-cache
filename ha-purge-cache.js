@@ -1,4 +1,4 @@
-/* HA Tools split — ha-purge-cache v4.1.3 (2026-05-12) — single-tool standalone repo */
+/* HA Tools split — ha-purge-cache v4.1.5 (2026-05-12) — single-tool standalone repo */
 (function() {
 'use strict';
 
