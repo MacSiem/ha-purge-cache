@@ -1,4 +1,4 @@
-/* HA Tools split — ha-purge-cache v4.1.6 (2026-05-12) — single-tool standalone repo */
+/* HA Tools split — ha-purge-cache v4.1.7 (2026-05-12) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -865,7 +865,10 @@ class HAPurgeCache extends HTMLElement {
   }
 
   async _collectStats() {
+    this._loading = true;
+    this._showLoadingState();
     const stats = {};
+    try {
 
     // localStorage
     try {
@@ -953,7 +956,10 @@ class HAPurgeCache extends HTMLElement {
     }
 
     this._stats = stats;
-    this._updateDisplay();
+    } finally {
+      this._loading = false;
+      this._updateDisplay();
+    }
   }
 
 
@@ -965,6 +971,16 @@ class HAPurgeCache extends HTMLElement {
 
   _esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  _showLoadingState() {
+    const root = this.shadowRoot;
+    if (!root) return;
+    const placeholder = '<span style="opacity:0.45">&#x23F3; Loading…</span>';
+    ['#stat-ls','#stat-ss','#stat-sw','#stat-cs','#stat-ts'].forEach(id => {
+      const el = root.querySelector(id);
+      if (el) el.innerHTML = placeholder;
+    });
   }
 
   _updateDisplay() {
@@ -1038,7 +1054,7 @@ class HAPurgeCache extends HTMLElement {
       <div class="key-row">
         <span class="key-name" title="${_esc(k.key)}">${_esc(k.key.length > 40 ? k.key.substring(0, 37) + '...' : k.key)}</span>
         <span class="key-size">${k.sizeKB} KB</span>
-        <button class="btn-sm btn-danger" data-key="${_esc(k.key)}" title="${t.deleteKey}">\u2715</button>
+        <button class="btn-sm btn-danger" data-key="${_esc(k.key)}" title="${t.deleteKey}" aria-label="${t.deleteKey}: ${_esc(k.key)}">\u2715</button>
       </div>
     `).join('');
 
@@ -1614,49 +1630,49 @@ class HAPurgeCache extends HTMLElement {
 
           <div class="cache-col">
             <div class="actions-grid">
-              <button class="action-btn" id="btn-purge-ls">
+              <button class="action-btn" id="btn-purge-ls" aria-label="${t.btnPurgeLS}">
                 <span class="action-icon">\u{1F5D1}\uFE0F</span>
                 <div>
                   <div class="action-label">${t.btnPurgeLS}</div>
                   <div class="action-desc">${t.btnPurgeLSDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-purge-ss">
+              <button class="action-btn" id="btn-purge-ss" aria-label="${t.btnPurgeSS}">
                 <span class="action-icon">\u{1F4CB}</span>
                 <div>
                   <div class="action-label">${t.btnPurgeSS}</div>
                   <div class="action-desc">${t.btnPurgeSSDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-purge-sw">
+              <button class="action-btn" id="btn-purge-sw" aria-label="${t.btnPurgeSW}">
                 <span class="action-icon">\u2699\uFE0F</span>
                 <div>
                   <div class="action-label">${t.btnPurgeSW}</div>
                   <div class="action-desc">${t.btnPurgeSWDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-purge-cs">
+              <button class="action-btn" id="btn-purge-cs" aria-label="${t.btnPurgeCS}">
                 <span class="action-icon">\u{1F4E6}</span>
                 <div>
                   <div class="action-label">${t.btnPurgeCS}</div>
                   <div class="action-desc">${t.btnPurgeCSDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-reload-tools">
+              <button class="action-btn" id="btn-reload-tools" aria-label="${t.btnReloadTools}">
                 <span class="action-icon">\u{1F504}</span>
                 <div>
                   <div class="action-label">${t.btnReloadTools}</div>
                   <div class="action-desc">${t.btnReloadToolsDesc}</div>
                 </div>
               </button>
-              <button class="action-btn danger" id="btn-purge-all">
+              <button class="action-btn danger" id="btn-purge-all" aria-label="${t.btnPurgeAll}">
                 <span class="action-icon">\u{1F9F9}</span>
                 <div>
                   <div class="action-label">${t.btnPurgeAll}</div>
                   <div class="action-desc">${t.btnPurgeAllDesc}</div>
                 </div>
               </button>
-              <button class="action-btn primary" id="btn-hard-reload">
+              <button class="action-btn primary" id="btn-hard-reload" aria-label="${t.btnHardReload}">
                 <span class="action-icon">\u26A1</span>
                 <div>
                   <div class="action-label">${t.btnHardReload}</div>
