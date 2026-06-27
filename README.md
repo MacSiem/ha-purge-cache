@@ -8,6 +8,10 @@ Clear browser cache, Service Workers, localStorage and tool scripts.
 
 > Part of the [HA Tools](https://github.com/MacSiem) ecosystem — split into individual HACS-installable plugins.
 
+## Screenshot
+
+![Screenshot](screenshot.png)
+
 ## Installation (HACS)
 
 1. Open HACS → Frontend → ⋮ → **Custom repositories**
