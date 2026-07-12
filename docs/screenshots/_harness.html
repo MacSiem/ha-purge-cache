@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PC screenshot harness</title>
+<style>
+  html, body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body.light { background: #f4f5f7; }
+  body.light ha-purge-cache { --card-background-color: #ffffff; --primary-background-color: #f4f5f7; }
+  body.dark { background: #111318; }
+  body.dark ha-purge-cache { --card-background-color: #1c1e26; --primary-background-color: #111318; }
+  ha-purge-cache { display: block; width: 480px; }
+</style>
+</head>
+<body>
+<ha-purge-cache id="card"></ha-purge-cache>
+<script>
+  // Seed a few plausible keys so the localStorage stat is non-trivial (intro key included).
+  try {
+    localStorage.setItem('ha-intro-dismissed-ha-purge-cache', '1');
+    localStorage.setItem('ha-tools-settings', '{"lang":"en"}');
+    localStorage.setItem('hacs-frontend-mode', 'grid');
+    localStorage.setItem('selectedTheme', 'default');
+    sessionStorage.setItem('ha-session-probe', '1');
+  } catch (e) {}
+</script>
+<script src="../../ha-purge-cache.js"></script>
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+  document.body.className = theme;
+
+  const hass = {
+    language: 'en',
+    themes: { darkMode: theme === 'dark' },
+    states: {},
+    services: {},
+    connection: { subscribeEvents: () => Promise.resolve(() => {}) },
+    callWS: async () => ({}),
+    callApi: async () => ({}),
+    callService: async () => ({}),
+  };
+
+  const card = document.getElementById('card');
+  card.setConfig({ type: 'custom:ha-purge-cache' });
+  card.hass = hass;
+  setTimeout(() => { card.hass = { ...hass }; }, 400);
+  const scrub = () => { try { card.shadowRoot && card.shadowRoot.querySelectorAll('#tip-banner, [class*="banner"], .donate-section').forEach(n => n.remove()); } catch (e) {} };
+  setInterval(scrub, 150);
+  setTimeout(() => { scrub(); document.title = 'PC-READY'; }, 1300);
+})();
+</script>
+</body>
+</html>

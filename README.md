@@ -1,69 +1,88 @@
-# 🧹 Purge Cache
+# Purge Cache
 
 ![Preview](banner.png)
 
-Clear browser cache, Service Workers, localStorage and tool scripts.
+Fix "my dashboard won't update" in one click: inspect and clear browser
+localStorage, sessionStorage, Service Workers and Cache Storage, and
+force-reload HA Tools scripts — from a Lovelace card.
 
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/github/v/release/MacSiem/ha-purge-cache)](https://github.com/MacSiem/ha-purge-cache/releases)
+[![Version](https://img.shields.io/github/v/release/MacSiem/ha-purge-cache)](https://github.com/MacSiem/ha-purge-cache/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> Part of the [HA Tools](https://github.com/MacSiem) ecosystem — split into individual HACS-installable plugins.
+## How it works
 
-## Screenshot
+**Short version: it works automatically.** The card needs no configuration:
 
-![Screenshot](screenshot.png)
+1. **Live browser stats.** On load it counts localStorage keys (with sizes),
+   sessionStorage, registered Service Workers and Cache Storage entries for
+   your HA frontend — and lists every localStorage key with a per-key delete
+   button.
+2. **Targeted or full cleanup.** Each storage type has its own button with a
+   clear warning about what you lose (clearing localStorage logs you out of
+   HA; Service Workers and Cache Storage are safe). **Clear EVERYTHING** runs
+   all of them and hard-reloads the page.
+3. **Everything is browser-local.** The card never touches your HA server
+   config — it only clears *this browser's* cached state.
 
-## Installation (HACS)
+### What is automatic vs. manual
 
-1. Open HACS → Frontend → ⋮ → **Custom repositories**
-2. Repository URL: `https://github.com/MacSiem/ha-purge-cache` — Category: **Lovelace**
-3. Install **Purge Cache** from HACS
-4. Restart Home Assistant
+| Automatic | Manual |
+|---|---|
+| Counting storage / SW / cache stats | Choosing what to clear |
+| Size per localStorage key | Confirming each destructive action |
+| Hard reload after "Clear EVERYTHING" | — |
 
-## Usage
+## Screenshots
 
-### Lovelace card
+| Light | Dark |
+|---|---|
+| ![Main view, light theme](docs/screenshots/card-main-light.png) | ![Main view, dark theme](docs/screenshots/card-main-dark.png) |
+
+*Storage stats, the localStorage key browser and one-click cleanup actions.
+Dark mode follows your Home Assistant theme automatically.*
+
+## Installation
+
+1. Open HACS → Custom repositories.
+2. Add `https://github.com/MacSiem/ha-purge-cache` as category **Dashboard**
+   (Lovelace plugin).
+3. Install **Purge Cache** and reload your browser.
+
+## Quick start
 
 ```yaml
 type: custom:ha-purge-cache
 ```
 
-### Optional sidebar panel (`configuration.yaml`)
+That's it — no options are required.
 
-```yaml
-panel_custom:
-  - name: ha-purge-cache
-    sidebar_title: Purge Cache
-    sidebar_icon: mdi:home-assistant
-    url_path: ha-purge-cache
-    js_url: /local/community/ha-purge-cache/ha-purge-cache.js
-    embed_iframe: false
-    config: {}
-```
+## FAQ
 
-After restart, **Purge Cache** appears in the HA sidebar.
+**When do I need this?**
+When a dashboard or HA Tools card won't pick up an update, a panel misbehaves
+after an upgrade, or you want to reset frontend state without digging through
+browser devtools.
 
-## Features
+**Will I get logged out?**
+Only if you clear **localStorage** (your HA login token lives there) or use
+**Clear EVERYTHING** — the card warns you first. sessionStorage, Service
+Workers and Cache Storage are safe to clear.
 
-- Clear browser cache, Service Workers, localStorage and tool scripts.
-- Bundled Bento Design System (light + dark mode, mobile-friendly)
-- Self-contained — no shared HA Tools dependency
-- Tool settings and dismissed-banner state are cached in browser `localStorage`
-## Privacy
+**Does it change anything on my HA server?**
+No. All actions are strictly browser-side; your configuration, automations
+and history are untouched.
 
-- No telemetry, no analytics, no tracking
-- No external network calls, no CDN-hosted assets (system fonts only)
-- No data leaves your device (no external network calls)
+**Does this send data anywhere?**
+No. Everything runs locally in your browser — no telemetry, no CDN assets.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
 
 ## Support
 
-If this tool makes your Home Assistant life easier, consider supporting development:
-
-- [☕ Buy Me a Coffee](https://buymeacoffee.com/macsiem)
-- [💳 PayPal](https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W)
+- [Buy Me a Coffee](https://buymeacoffee.com/macsiem)
+- [PayPal](https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
