@@ -1,4 +1,4 @@
-/* HA Tools split — ha-purge-cache v4.1.11 (2026-05-12) — single-tool standalone repo */
+/* HA Tools split — ha-purge-cache v4.1.12 (2026-05-12) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -1181,6 +1181,9 @@ class HAPurgeCache extends HTMLElement {
     await this._purgeCacheStorage();
     await this._forceReloadTools();
     this._addLog(this._t.logPurgeDone, 'success');
+    // The README documents "Clear EVERYTHING" as also hard-reloading the page
+    // (listed as automatic). It never did — the reload was a separate button.
+    this._hardReload();
   }
 
   _hardReload() {
