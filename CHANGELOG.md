@@ -1,3 +1,12 @@
+## 4.1.13 (2026-08-28)
+
+- Isolation: Bento CSS is component-local and cannot be captured from `window.HAToolsBentoCSS` by load order.
+- Security: remove the suite-wide DOM/shadow-root injector; the support footer now renders only inside this card.
+- Security: normalize localStorage keys and editor values before inherited escaping; restore the editor's scoped escape helper.
+- Layout/lifecycle: make the action grid respect narrow card boundaries and cancel delayed reload on disconnect.
+- Accuracy: report the public card registry exactly, or N/A when unavailable; remove the fabricated minimum and document scan.
+- Test: add foreign-card isolation, no-document-observer and hostile-array runtime checks.
+
 ## 4.1.12 (2026-07-18)
 
 - Fix: "Clear EVERYTHING" now hard-reloads the page, as the README documents. Previously the reload only happened via the separate Hard reload button.

@@ -1,4 +1,4 @@
-/* HA Tools split — ha-purge-cache v4.1.12 (2026-05-12) — single-tool standalone repo */
+/* HA Tools split — ha-purge-cache v4.1.13 (2026-08-28) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -12,8 +12,7 @@
 
 /* ===== HA Tools split — inline shared infrastructure ===== */
 // Bento Design System CSS (inline copy — keeps tool standalone)
-if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
-  window.HAToolsBentoCSS = `
+const HA_PURGE_CACHE_BENTO_CSS = `
 /* ═══════════════════════════════════════════════
    HA Tools — Bento Design System v2.0 (Premium)
    ═══════════════════════════════════════════════ */
@@ -503,212 +502,19 @@ pre {
   .stat-value, .stat-val, .kpi-val { font-size: 18px; }
 }
 `;
-}
-// XSS escape singleton (idempotent)
-if (typeof window !== 'undefined') {
-  window._haToolsEsc = window._haToolsEsc || (function(){
-    var MAP = {};
-    MAP[String.fromCharCode(38)] = '&amp;';
-    MAP[String.fromCharCode(60)] = '&lt;';
-    MAP[String.fromCharCode(62)] = '&gt;';
-    MAP[String.fromCharCode(34)] = '&quot;';
-    MAP[String.fromCharCode(39)] = '&#39;';
-    return function(s){ return typeof s === 'string' ? s.replace(/[&<>"']/g, function(c){ return MAP[c]; }) : (s == null ? '' : s); };
-  })();
-}
-// Universal donate footer injector — guarantees the support box appears
-// on every split-tool card regardless of internal render state.
-if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
-  window.__haToolsSplitDonateInjector = true;
-  var SPLIT_TAGS = ['ha-purge-cache','ha-yaml-checker','ha-data-exporter','ha-baby-tracker','ha-chore-tracker','ha-energy-optimizer','ha-energy-insights','ha-energy-email','ha-log-email','ha-smart-reports','ha-network-map','ha-trace-viewer','ha-automation-analyzer','ha-storage-monitor','ha-backup-manager','ha-security-check','ha-device-health','ha-sentence-manager','ha-encoding-fixer','ha-entity-renamer','ha-frigate-privacy','ha-vacuum-water-monitor'];
-  var DONATE_HTML = ''
-    + '<div class="donate-section" data-source="ha-tools-split-injector">'
-    + '  <div class="donate-text">'
-    + '    <h3>❤️ Support HA Tools Development</h3>'
-    + '    <p>If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!</p>'
-    + '  </div>'
-    + '  <div class="donate-buttons">'
-    + '    <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>'
-    + '    <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>'
-    + '  </div>'
-    + '</div>';
-  function deepFindAll(tag, root) {
-    var out = [];
-    (function walk(node){
-      if (!node || !node.querySelectorAll) return;
-      var children = node.querySelectorAll('*');
-      for (var i = 0; i < children.length; i++) {
-        var c = children[i];
-        if (c.tagName && c.tagName.toLowerCase() === tag) out.push(c);
-        if (c.shadowRoot) walk(c.shadowRoot);
-      }
-    })(root || document);
-    return out;
-  }
-  // Per-tool prerequisite check + inline install banner
-  var PREREQS = {
-    'ha-energy-email': { service: 'ha_tools_email', repo: 'ha-tools-email-integration', label: 'HA Tools Email integration', kind: 'integration' },
-    'ha-log-email':    { service: 'ha_tools_email', repo: 'ha-tools-email-integration', label: 'HA Tools Email integration', kind: 'integration' },
-    'ha-encoding-fixer': { shellCommand: 'fix_encoding', label: 'shell_command.fix_encoding (optional advanced feature)', kind: 'shell_command_optional' }
-  };
-  // Per-tool first-run intro banner (one-line scope + 3 use cases)
-  var INTROS = {
-    'ha-yaml-checker': { headline: 'Validate Home Assistant YAML configuration on demand.', steps: ['Click \'Check HA Configuration\' to run homeassistant.check_config.', 'Switch to \'Encje\' tab to search entities by domain.', 'Use \'Template\' tab to preview Jinja2 templates.'] },
-    'ha-data-exporter': { headline: 'Browse, filter, and export Home Assistant entity data.', steps: ['Filter by domain or search entities live.', 'Take a snapshot or export selection to CSV / JSON.', 'Privacy warning before downloading attributes with sensitive data.'] },
-    'ha-chore-tracker': { headline: 'Household chore tracker with kanban + recurring schedules.', steps: ['Add a chore: name + assignee + frequency.', 'Drag from \'Todo\' to \'Done\' to mark complete.', 'Stats tab shows counts per assignee.'] },
-    'ha-energy-optimizer': { headline: 'Tariff-aware energy usage with hourly heatmaps + tips.', steps: ['Today / Yesterday / 7-day / 30-day usage and cost.', 'Patterns tab — hourly heatmap of consumption.', 'Recommendations tab — auto-generated tips.'] },
-    'ha-energy-insights': { headline: 'Daily / weekly / monthly energy charts + top consumers.', steps: ['Switch view tabs to see consumption over time.', 'Top devices ranked by kWh.', 'Tips tab with energy-saving suggestions.'] },
-    'ha-energy-email': { headline: 'Energy reports delivered by email via ha_tools_email.', steps: ['Click \'Send Now\' to email the current snapshot.', 'Schedule daily / weekly / monthly delivery.', 'Configure SMTP in the Schedule tab (one-time).'] },
-    'ha-log-email': { headline: 'Daily error / warning digests delivered by email.', steps: ['Click \'Send Now\' to email the current digest.', 'Schedule daily delivery + threshold (e.g. \u22653 errors).', 'Requires ha-tools-email-integration.'] },
-    'ha-smart-reports': { headline: 'Aggregate weekly / monthly reports — energy + automations + state changes.', steps: ['Weekly summary card on Overview.', 'Drill down by Energy / Automations / System sub-tabs.', 'Privacy-safe view strips entity names before sharing.'] },
-    'ha-network-map': { headline: 'Visualise the network around HA — devices, topology, MAC bindings.', steps: ['Devices tab — table of all known devices.', 'Topology tab — graph view of the network.', 'Click \'Rescan\' to ping the local subnet (user-initiated).'] },
-    'ha-trace-viewer': { headline: 'Step through HA automation traces with a flow graph.', steps: ['Pick automation in sidebar to see latest 5 traces.', 'Click trace for full path through triggers / conditions / actions.', 'Export trace as JSON for offline debug.'] },
-    'ha-automation-analyzer': { headline: 'Surface slow / failing / suspicious automations.', steps: ['Overview shows total + health score + top failing.', 'Performance tab ranks by avg runtime.', 'Optimization tab suggests improvements (loops, redundant triggers).'] },
-    'ha-storage-monitor': { headline: 'Disk + recorder DB + add-on storage breakdown.', steps: ['Overview shows used / free + per-category breakdown.', 'Backups tab — count + size warning.', 'Cleanup tab — actionable suggestions.'] },
-    'ha-backup-manager': { headline: 'Create + list + inspect HA backups.', steps: ['List existing backups (date / size / encryption).', 'Click \'Create backup now\' to invoke backup.create.', 'Restore selected backup.'] },
-    'ha-security-check': { headline: 'Security audit + remediation tips.', steps: ['Overview shows score (X/100) + letter grade.', 'Click warning row for step-by-step remediation.', 'Tips tab — checklist of best practices.'] },
-    'ha-device-health': { headline: 'Device battery / signal / last-seen health.', steps: ['List devices grouped by health (OK / Warning / Critical).', 'Filter by low battery (<20%) or weak signal.', 'Click device for model / manufacturer / last seen.'] },
-    'ha-encoding-fixer': { headline: 'Detect + fix UTF-8 / mojibake issues across HA.', steps: ['Click \'Scan\' to walk entity registry + states.', 'Per-entity \'Fix\' button calls homeassistant.reload.', 'Optional: deep file scan via shell_command (see README).'] },
-    'ha-entity-renamer': { headline: 'Bulk-rename HA entities + friendly names.', steps: ['Pick an entity, set new ID — entity_registry/update.', 'Bulk pattern: sensor.old_* \u2192 sensor.new_*.', 'Optional: rewrite Lovelace dashboard refs.'] },
-    'ha-frigate-privacy': { headline: 'One-click Frigate privacy mode (pause detection / recording / snapshots).', steps: ['Click \'Pause 15 min\' for instant privacy.', 'Schedules tab — daily privacy window (e.g. 22:00\u201306:00).', 'Resume at any time to re-enable cameras.'] }
-  };
-  var PREREQ_HTML_CACHE = {};
-  function buildPrereqBanner(tag, prereq, hass) {
-    if (PREREQ_HTML_CACHE[tag]) return PREREQ_HTML_CACHE[tag];
-    var html = '';
-    if (prereq.kind === 'integration') {
-      html = '<div class="prereq-banner prereq-error" data-prereq="' + tag + '">' +
-        '<div class="prereq-icon">⚠️</div>' +
-        '<div class="prereq-text">' +
-          '<strong>This tool requires the ' + prereq.label + '</strong><br>' +
-          'Install it from HACS: <code>https://github.com/MacSiem/' + prereq.repo + '</code> ' +
-          '(Category: <strong>Integration</strong>) — then add <code>' + prereq.service + ':</code> to your <code>configuration.yaml</code> and restart HA.' +
-        '</div>' +
-        '<a class="prereq-cta" href="https://github.com/MacSiem/' + prereq.repo + '" target="_blank" rel="noopener noreferrer">Open install guide ↗</a>' +
-      '</div>';
-    } else if (prereq.kind === 'shell_command_optional') {
-      html = '<div class="prereq-banner prereq-info" data-prereq="' + tag + '">' +
-        '<div class="prereq-icon">💡</div>' +
-        '<div class="prereq-text">' +
-          '<strong>Optional advanced feature: deep file scan</strong><br>' +
-          'To enable scanning of <code>configuration.yaml</code> files, install the bundled <code>encoding_scanner.py</code> + add <code>shell_command:</code> entries. See README.' +
-        '</div>' +
-      '</div>';
-    }
-    PREREQ_HTML_CACHE[tag] = html;
-    return html;
-  }
-  function buildIntroBanner(tag, intro) {
-    var stepsHtml = intro.steps.map(function(s){ return '<li>' + s + '</li>'; }).join('');
-    return '<div class="intro-banner" data-intro="' + tag + '">' +
-      '<button class="intro-dismiss" type="button" title="Dismiss" aria-label="Dismiss">✕</button>' +
-      '<div class="intro-headline">💡 ' + intro.headline + '</div>' +
-      '<ol class="intro-steps">' + stepsHtml + '</ol>' +
-    '</div>';
-  }
-  function introDismissed(tag) {
-    try { return localStorage.getItem('ha-intro-dismissed-' + tag) === '1'; } catch(e) { return false; }
-  }
-  function dismissIntro(tag, el) {
-    try { localStorage.setItem('ha-intro-dismissed-' + tag, '1'); } catch(e) {}
-    var node = el.shadowRoot && el.shadowRoot.querySelector('.intro-banner[data-intro="' + tag + '"]');
-    if (node) node.remove();
-  }
-  function injectInto(tag, el) {
-        // panel_custom auto-init: HA assigns hass/panel/narrow but does not always call setConfig.
-        if (typeof el.setConfig === 'function' && !el.config && !el._config) {
-          try { el.setConfig({ type: 'custom:' + tag, title: tag }); } catch(e) {}
-        }
-        if (!el.shadowRoot) return;
-        // 0) First-run intro banner (skip if tool has its own native tip)
-        var intro = INTROS[tag];
-        if (intro && !introDismissed(tag)) {
-          var hasOwnTip = el.shadowRoot.querySelector('#tip-banner, .tip-banner');
-          var injectedIntro = el.shadowRoot.querySelector('.intro-banner[data-intro="' + tag + '"]');
-          if (!hasOwnTip && !injectedIntro) {
-            try {
-              var _introTmp = document.createElement('div');
-              _introTmp.innerHTML = buildIntroBanner(tag, intro);
-              var _introNode = _introTmp.firstElementChild;
-              if (_introNode) el.shadowRoot.insertBefore(_introNode, el.shadowRoot.firstChild);
-              var btn = el.shadowRoot.querySelector('.intro-banner[data-intro="' + tag + '"] .intro-dismiss');
-              if (btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); dismissIntro(tag, el); });
-            } catch(e) {}
-          }
-        }
-        // 1) Prereq banner — checked every poll so it disappears when prereq becomes available
-        var prereq = PREREQS[tag];
-        if (prereq && el._hass) {
-          var hassReady = !!el._hass;
-          var present = true;
-          if (prereq.service) present = !!(el._hass.services && el._hass.services[prereq.service]);
-          if (prereq.shellCommand) present = !!(el._hass.services && el._hass.services.shell_command && el._hass.services.shell_command[prereq.shellCommand]);
-          var existing = el.shadowRoot.querySelector('.prereq-banner[data-prereq="' + tag + '"]');
-          if (!present && hassReady) {
-            if (!existing) {
-              try {
-                var _prereqTmp = document.createElement('div');
-                _prereqTmp.innerHTML = buildPrereqBanner(tag, prereq, el._hass);
-                var _prereqNode = _prereqTmp.firstElementChild;
-                if (_prereqNode) el.shadowRoot.insertBefore(_prereqNode, el.shadowRoot.firstChild);
-              } catch(e) {}
-            }
-          } else if (present && existing) {
-            existing.remove();
-          }
-        }
-        // 2) Donate footer
-        if (el.shadowRoot.querySelector('.donate-section')) return;
-        try {
-          var _donateTmp = document.createElement('div');
-          _donateTmp.innerHTML = DONATE_HTML;
-          while (_donateTmp.firstChild) el.shadowRoot.appendChild(_donateTmp.firstChild);
-        } catch(e) {}
-    // Anti-flicker: watch this card's own shadowRoot so a re-render (innerHTML wipe)
-    // re-injects the footer synchronously in the same microtask, before paint.
-    if (el.shadowRoot && !el.__haToolsReinjectObs) {
-      try {
-        el.__haToolsReinjectObs = new MutationObserver(function(){
-          if (el.__haToolsReinjecting) return;
-          el.__haToolsReinjecting = true;
-          try { injectInto(tag, el); } catch(e) {}
-          el.__haToolsReinjecting = false;
-        });
-        el.__haToolsReinjectObs.observe(el.shadowRoot, { childList: true });
-      } catch(e) {}
-    }
-  }
-  function injectAll() {
-    SPLIT_TAGS.forEach(function(tag){
-      deepFindAll(tag).forEach(function(el){ injectInto(tag, el); });
-    });
-  }
-  // Run immediately, then aggressive MutationObserver for late mounts + view switches.
-  injectAll();
-  setTimeout(injectAll, 250);
-  setTimeout(injectAll, 1000);
-  setTimeout(injectAll, 3000);
-  // MutationObserver catches every new node anywhere in the DOM, including shadow root attachments
-  // that are deferred until the user navigates to a view.
-  try {
-    var obs = new MutationObserver(function(muts){
-      // Debounce: schedule a microtask injection
-      if (window.__haToolsDonateScheduled) return;
-      window.__haToolsDonateScheduled = true;
-      setTimeout(function(){ window.__haToolsDonateScheduled = false; injectAll(); }, 100);
-    });
-    obs.observe(document.body, { childList: true, subtree: true });
-  } catch(e) {}
-  // Also re-inject on hash/path change (Lovelace view switches)
-  window.addEventListener('hashchange', function(){ setTimeout(injectAll, 200); });
-  window.addEventListener('popstate', function(){ setTimeout(injectAll, 200); });
-  // Backup interval (every 3s for first 5min — handles cases where MutationObserver missed events)
-  var pollCount = 0;
-  var pollInterval = setInterval(function(){
-    injectAll();
-    if (++pollCount >= 100) clearInterval(pollInterval);
-  }, 3000);
-}
+const _esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+// Card-owned support footer. Never mutates document or foreign cards.
+const _LOCAL_DONATE_HTML = ''
+  + '<div class="donate-section" data-source="ha-purge-cache">'
+  + '  <div class="donate-text">'
+  + '    <h3>❤️ Support HA Tools Development</h3>'
+  + '    <p>If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!</p>'
+  + '  </div>'
+  + '  <div class="donate-buttons">'
+  + '    <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>'
+  + '    <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>'
+  + '  </div>'
+  + '</div>';
 /* ============================================================ */
 
 class HAPurgeCache extends HTMLElement {
@@ -726,6 +532,7 @@ class HAPurgeCache extends HTMLElement {
     this._stats = {};
     this._showConfirm = false;
     this._confirmAction = null;
+    this._reloadTimer = null;
   }
 
   _confirm(message, onConfirm) {
@@ -944,22 +751,18 @@ class HAPurgeCache extends HTMLElement {
     }
     }
 
-    // HA Tools scripts info (count registered ha-* custom elements)
+    // HA Tools scripts info (count only the public card-picker registry).
     try {
-      const registry = customElements;
-      let toolCount = 0;
-      // Count elements in customCards registry (HA Tools' discovery mechanism)
       if (window.customCards && Array.isArray(window.customCards)) {
-        toolCount = window.customCards.filter(c => c.type && c.type.startsWith('ha-')).length;
+        const toolCount = window.customCards.filter(
+          c => typeof c?.type === 'string' && c.type.startsWith('ha-')
+        ).length;
+        stats.toolScripts = { count: toolCount };
+      } else {
+        stats.toolScripts = { count: null, unavailable: true };
       }
-      // Fallback: if no customCards, count ha-* tags in DOM (rough estimate)
-      if (toolCount === 0) {
-        const allElements = document.querySelectorAll('[class*="ha-"]');
-        toolCount = Math.max(window.customCards?.length || 0, 1);
-      }
-      stats.toolScripts = { count: toolCount || 0 };
     } catch (e) {
-      stats.toolScripts = { count: 0 };
+      stats.toolScripts = { count: null, unavailable: true };
     }
 
     // HA Frontend version
@@ -987,7 +790,7 @@ class HAPurgeCache extends HTMLElement {
   }
 
   _esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   _showLoadingState() {
@@ -1039,7 +842,8 @@ class HAPurgeCache extends HTMLElement {
 
     const tsEl = root.querySelector('#stat-ts');
     if (tsEl && s.toolScripts) {
-      tsEl.innerHTML = `<span class="stat-num">${s.toolScripts.count}</span> ${t.statScripts}`;
+      const count = Number.isInteger(s.toolScripts.count) ? s.toolScripts.count : 'N/A';
+      tsEl.innerHTML = `<span class="stat-num">${count}</span> ${t.statScripts}`;
     }
 
     // HA version
@@ -1056,7 +860,7 @@ class HAPurgeCache extends HTMLElement {
     const container = this.shadowRoot?.querySelector('#ls-keys');
     if (!container) return;
     const t = this._t;
-    const _esc = window._haToolsEsc || this._esc.bind(this);
+    const escapeValue = (value) => this._esc(String(value == null ? '' : value));
 
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -1069,9 +873,9 @@ class HAPurgeCache extends HTMLElement {
 
     container.innerHTML = keys.map(k => `
       <div class="key-row">
-        <span class="key-name" title="${_esc(k.key)}">${_esc(k.key.length > 40 ? k.key.substring(0, 37) + '...' : k.key)}</span>
+        <span class="key-name" title="${escapeValue(k.key)}">${escapeValue(k.key.length > 40 ? k.key.substring(0, 37) + '...' : k.key)}</span>
         <span class="key-size">${k.sizeKB} KB</span>
-        <button class="btn-sm btn-danger" data-key="${_esc(k.key)}" title="${t.deleteKey}" aria-label="${t.deleteKey}: ${_esc(k.key)}">\u2715</button>
+        <button class="btn-sm btn-danger" data-key="${escapeValue(k.key)}" title="${t.deleteKey}" aria-label="${t.deleteKey}: ${escapeValue(k.key)}">\u2715</button>
       </div>
     `).join('');
 
@@ -1188,7 +992,9 @@ class HAPurgeCache extends HTMLElement {
 
   _hardReload() {
     this._addLog(this._t.logHardReload, 'info');
-    setTimeout(() => {
+    this._reloadTimer = setTimeout(() => {
+      this._reloadTimer = null;
+      if (!this.isConnected) return;
       // Cache-busting reload (location.reload(true) is deprecated in modern browsers)
       const url = new URL(window.location.href);
       url.searchParams.set('_cb', Date.now());
@@ -1212,7 +1018,7 @@ class HAPurgeCache extends HTMLElement {
     const t = this._t;
     this._rendered = true;
     this.shadowRoot.innerHTML = `
-      <style>${window.HAToolsBentoCSS || ""}
+      <style>${HA_PURGE_CACHE_BENTO_CSS}
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
 
 /* Donation footer — diamond top */
@@ -1476,7 +1282,7 @@ class HAPurgeCache extends HTMLElement {
         /* 2-column layout */
         .cache-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
           gap: 16px;
           box-sizing: border-box;
           max-width: 100%;
@@ -1722,6 +1528,7 @@ class HAPurgeCache extends HTMLElement {
         </div>
       
         </div>
+        ${_LOCAL_DONATE_HTML}
     `
 
     // Tip banner dismiss
@@ -1759,19 +1566,9 @@ class HAPurgeCache extends HTMLElement {
     });
   }
 
-  // HA Tools Panel discovery
-  _injectDiscovery() {
-    try {
-      const ev = new CustomEvent('ha-tools-discovery', {
-        bubbles: true, composed: true,
-        detail: { tag: 'ha-purge-cache', name: 'Purge Cache', version: '1.0.0' }
-      });
-      this.dispatchEvent(ev);
-    } catch (e) { /* ignore */ }
-  }
-
   disconnectedCallback() {
-    // Clear pending confirmation to prevent orphaned callbacks
+    if (this._reloadTimer) clearTimeout(this._reloadTimer);
+    this._reloadTimer = null;
     this._pendingConfirm = null;
   }
 }
