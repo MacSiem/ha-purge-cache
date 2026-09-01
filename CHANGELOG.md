@@ -1,3 +1,9 @@
+## 4.1.14 (2026-09-01)
+
+- Fixed the card crossing its Home Assistant Sections row boundary when the help panel or dynamic content makes it taller than six grid rows.
+- Sections now use the card's natural content height while retaining full-width and half-width resize options.
+- Added a regression check that rejects fixed row constraints for this dynamic card.
+
 ## 4.1.13 (2026-08-28)
 
 - Isolation: Bento CSS is component-local and cannot be captured from `window.HAToolsBentoCSS` by load order.

@@ -1,4 +1,4 @@
-/* HA Tools split — ha-purge-cache v4.1.13 (2026-08-28) — single-tool standalone repo */
+/* HA Tools split — ha-purge-cache v4.1.14 (2026-09-01) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -520,7 +520,9 @@ const _LOCAL_DONATE_HTML = ''
 class HAPurgeCache extends HTMLElement {
   static getConfigElement() { return document.createElement('ha-purge-cache-editor'); }
   getCardSize() { return 6; }
-  getGridOptions() { return { rows: 6, columns: 12, min_rows: 3, min_columns: 6 }; }
+  // Dynamic sections (tips, keys and actions) must keep their natural height.
+  // Omitting rows is the Home Assistant API contract for content-driven height.
+  getGridOptions() { return { columns: 12, min_columns: 6 }; }
 
   static getStubConfig() { return { type: 'custom:ha-purge-cache', title: 'Purge Cache' }; }
   setConfig(config) { this._config = config || {}; }
