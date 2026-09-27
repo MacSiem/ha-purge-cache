@@ -17,9 +17,10 @@ force-reload HA Tools scripts — from a Lovelace card.
    your HA frontend — and lists every localStorage key with a per-key delete
    button.
 2. **Targeted or full cleanup.** Each storage type has its own button with a
-   clear warning about what you lose (clearing localStorage logs you out of
-   HA; Service Workers and Cache Storage are safe). **Clear EVERYTHING** runs
-   all of them and hard-reloads the page.
+   clear warning about what you lose. **Clear caches only** removes Service
+   Workers and Cache Storage, then reloads the page while retaining login and
+   locally saved tool data. **Clear EVERYTHING** also removes localStorage and
+   sessionStorage, then reloads the page.
 3. **Everything is browser-local.** The card never touches your HA server
    config — it only clears *this browser's* cached state.
 
@@ -29,7 +30,7 @@ force-reload HA Tools scripts — from a Lovelace card.
 |---|---|
 | Counting storage / SW / cache stats | Choosing what to clear |
 | Size per localStorage key | Confirming each destructive action |
-| Hard reload after "Clear EVERYTHING" | — |
+| Reload after "Clear caches only" or "Clear EVERYTHING" | — |
 
 ## Screenshots
 
@@ -64,8 +65,11 @@ browser devtools.
 
 **Will I get logged out?**
 Only if you clear **localStorage** (your HA login token lives there) or use
-**Clear EVERYTHING** — the card warns you first. sessionStorage, Service
-Workers and Cache Storage are safe to clear.
+**Clear EVERYTHING**. Both can also erase local Baby Tracker records, saved
+Trace Viewer traces and other browser-only data. Use **Clear caches only** to
+retain these. Browser Cache Storage is separate from the normal HTTP cache;
+if a HACS JavaScript update still appears stale, update its Lovelace resource
+URL or reload the frontend after HACS changes it.
 
 **Does it change anything on my HA server?**
 No. All actions are strictly browser-side; your configuration, automations

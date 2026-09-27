@@ -552,7 +552,7 @@ class HAPurgeCache extends HTMLElement {
         title: 'Wyczy\u015B\u0107 Cache',
         subtitle: 'Wyczy\u015B\u0107 cache przegl\u0105darki, Service Workers, localStorage i skrypty narz\u0119dzi.',
         warningTitle: '\u26A0\uFE0F Uwaga:',
-        warningText: 'Czyszczenie <strong>localStorage</strong> spowoduje wylogowanie z HA i reset ustawie\u0144 panelu. <strong>Service Workers</strong> i <strong>Cache Storage</strong> s\u0105 bezpieczne \u2014 nie wp\u0142ywaj\u0105 na logowanie.',
+        warningText: 'Czyszczenie <strong>localStorage</strong> usunie logowanie i zapisane dane narz\u0119dzi, w tym lokalne rekordy Baby Tracker oraz trace z Trace Viewer. <strong>Service Workers</strong> i <strong>Cache Storage</strong> nie usuwaj\u0105 tych danych.',
         tipTitle: '\u{1F4A1} Jak korzysta\u0107?',
         tip1: '<strong>localStorage</strong> \u2014 ustawienia panelu, HACS, frontend HA. Po czyszczeniu trzeba si\u0119 ponownie zalogowa\u0107.',
         tip2: '<strong>sessionStorage</strong> \u2014 dane bie\u017C\u0105cej sesji. Bezpieczne do czyszczenia.',
@@ -571,7 +571,9 @@ class HAPurgeCache extends HTMLElement {
         btnReloadTools: 'Prze\u0142aduj skrypty narz\u0119dzi',
         btnReloadToolsDesc: 'Force fetch z cache: no-store',
         btnPurgeAll: 'Wyczy\u015B\u0107 WSZYSTKO',
-        btnPurgeAllDesc: '\u26A0\uFE0F Wymaga ponownego logowania!',
+        btnPurgeAllDesc: '\u26A0\uFE0F Usuwa te\u017C zapisane dane narz\u0119dzi',
+        btnPurgeCaches: 'Wyczy\u015B\u0107 tylko cache',
+        btnPurgeCachesDesc: 'Zachowaj logowanie i dane HA Tools',
         btnHardReload: 'Hard Reload',
         btnHardReloadDesc: 'Ctrl+Shift+R \u2014 pe\u0142ne prze\u0142adowanie',
         logHeader: 'Akcje',
@@ -583,11 +585,11 @@ class HAPurgeCache extends HTMLElement {
         statEntries: 'wpis\u00F3w',
         statScripts: 'skrypt\u00F3w',
         deleteKey: 'Usu\u0144 ten klucz',
-        confirmLS: 'Wyczy\u015Bci\u0107 localStorage?\n\n\u26A0\uFE0F Utracone dane:\n\u2022 Token logowania \u2014 wymagane ponowne zalogowanie\n\u2022 Ustawienia panelu HA Tools\n\u2022 Preferencje HACS i frontendu\n\u2022 Zapami\u0119tane filtry i widoki\n\nCzy kontynuowa\u0107?',
+        confirmLS: 'Wyczy\u015Bci\u0107 localStorage?\n\n\u26A0\uFE0F Utracisz token logowania, ustawienia oraz lokalne rekordy Baby Tracker i zapisane trace z Trace Viewer. Dane bez kopii w HA mog\u0105 przepa\u015B\u0107.\n\nWybierz „Wyczy\u015B\u0107 tylko cache”, aby je zachowa\u0107. Kontynuowa\u0107?',
         confirmSS: 'Wyczy\u015Bci\u0107 sessionStorage?\n\n\u{1F4CB} Utracone dane:\n\u2022 Dane bie\u017C\u0105cej sesji (formularze, stany tymczasowe)\n\u2022 Nie wymaga ponownego logowania\n\nCzy kontynuowa\u0107?',
         confirmSW: 'Wyrejestrowa\u0107 Service Workers?\n\n\u2699\uFE0F Efekt:\n\u2022 Usuni\u0119cie offline cache \u2014 zasoby b\u0119d\u0105 \u0142adowane z serwera\n\u2022 Nie wymaga ponownego logowania\n\u2022 Mo\u017Ce spowolni\u0107 pierwsze \u0142adowanie\n\nCzy kontynuowa\u0107?',
         confirmCS: 'Usun\u0105\u0107 Cache Storage?\n\n\u{1F4E6} Efekt:\n\u2022 Usuni\u0119cie cache API przegl\u0105darki\n\u2022 Nie wymaga ponownego logowania\n\u2022 Zwolni miejsce\n\nCzy kontynuowa\u0107?',
-        confirmAll: '\u{1F9F9} Wyczy\u015Bci\u0107 WSZYSTKO?\n\n\u26A0\uFE0F UWAGA \u2014 zostan\u0105 usuni\u0119te:\n\u2022 localStorage (wymagane ponowne logowanie!)\n\u2022 sessionStorage\n\u2022 Service Workers\n\u2022 Cache Storage\n\u2022 Prze\u0142adowanie skrypt\u00F3w narz\u0119dzi\n\nPo czyszczeniu nast\u0105pi automatyczny hard reload.\n\nCzy kontynuowa\u0107?',
+        confirmAll: '\u{1F9F9} Wyczy\u015Bci\u0107 WSZYSTKO?\n\n\u26A0\uFE0F Nieodwracalnie usuniesz lokalne dane, w tym zapisy Baby Tracker, zapisane trace z Trace Viewer, ustawienia i token logowania HA. Dane, kt\u00F3re istniej\u0105 tylko w tej przegl\u0105darce, mog\u0105 przepa\u015B\u0107.\n\nZamiast tego wybierz „Wyczy\u015B\u0107 tylko cache”, aby zachowa\u0107 dane.\n\nKontynuowa\u0107 pe\u0142ny reset?',
         confirmHardReload: 'Wykona\u0107 Hard Reload?\n\nStrona zostanie ca\u0142kowicie prze\u0142adowana.\nNiezapisane dane mog\u0105 zosta\u0107 utracone.\n\nCzy kontynuowa\u0107?',
         logLsCleared: (n) => `\u2705 localStorage wyczyszczony (${n} kluczy usuni\u0119tych)`,
         logLsFailed: (n) => `\u26A0\uFE0F localStorage nie zosta\u0142 w pe\u0142ni wyczyszczony (${n} kluczy pozosta\u0142o)`,
@@ -610,7 +612,7 @@ class HAPurgeCache extends HTMLElement {
         title: 'Purge Cache',
         subtitle: 'Clear browser cache, Service Workers, localStorage and tool scripts.',
         warningTitle: '\u26A0\uFE0F Warning:',
-        warningText: 'Clearing <strong>localStorage</strong> will log you out of HA and reset panel settings. <strong>Service Workers</strong> and <strong>Cache Storage</strong> are safe \u2014 they do not affect login.',
+        warningText: 'Clearing <strong>localStorage</strong> removes login and saved tool data, including local Baby Tracker records and Trace Viewer traces. <strong>Service Workers</strong> and <strong>Cache Storage</strong> keep that data.',
         tipTitle: '\u{1F4A1} How to use?',
         tip1: '<strong>localStorage</strong> \u2014 panel settings, HACS, HA frontend. Clearing requires re-login.',
         tip2: '<strong>sessionStorage</strong> \u2014 current session data. Safe to clear.',
@@ -629,7 +631,9 @@ class HAPurgeCache extends HTMLElement {
         btnReloadTools: 'Reload tool scripts',
         btnReloadToolsDesc: 'Force fetch with cache: no-store',
         btnPurgeAll: 'Clear EVERYTHING',
-        btnPurgeAllDesc: '\u26A0\uFE0F Requires re-login!',
+        btnPurgeAllDesc: '\u26A0\uFE0F Also deletes saved tool data',
+        btnPurgeCaches: 'Clear caches only',
+        btnPurgeCachesDesc: 'Keep login and HA Tools data',
         btnHardReload: 'Hard Reload',
         btnHardReloadDesc: 'Ctrl+Shift+R \u2014 full page reload',
         logHeader: 'Actions',
@@ -641,11 +645,11 @@ class HAPurgeCache extends HTMLElement {
         statEntries: 'entries',
         statScripts: 'scripts',
         deleteKey: 'Delete this key',
-        confirmLS: 'Clear localStorage?\n\n\u26A0\uFE0F Data that will be lost:\n\u2022 Login token \u2014 re-login required\n\u2022 HA Tools panel settings\n\u2022 HACS and frontend preferences\n\u2022 Saved filters and views\n\nContinue?',
+        confirmLS: 'Clear localStorage?\n\n\u26A0\uFE0F You will lose your login token, settings, local Baby Tracker records and saved Trace Viewer traces. Data without a copy in HA may be lost.\n\nChoose “Clear caches only” to keep them. Continue?',
         confirmSS: 'Clear sessionStorage?\n\n\u{1F4CB} Data that will be lost:\n\u2022 Current session data (forms, temporary states)\n\u2022 No re-login required\n\nContinue?',
         confirmSW: 'Unregister Service Workers?\n\n\u2699\uFE0F Effect:\n\u2022 Removes offline cache \u2014 assets will load from server\n\u2022 No re-login required\n\u2022 May slow down first load\n\nContinue?',
         confirmCS: 'Delete Cache Storage?\n\n\u{1F4E6} Effect:\n\u2022 Removes browser cache API\n\u2022 No re-login required\n\u2022 Frees up space\n\nContinue?',
-        confirmAll: '\u{1F9F9} Clear EVERYTHING?\n\n\u26A0\uFE0F WARNING \u2014 will be removed:\n\u2022 localStorage (re-login required!)\n\u2022 sessionStorage\n\u2022 Service Workers\n\u2022 Cache Storage\n\u2022 Tool script reload\n\nA hard reload will follow automatically.\n\nContinue?',
+        confirmAll: '\u{1F9F9} Clear EVERYTHING?\n\n\u26A0\uFE0F This permanently removes browser-local data, including Baby Tracker records, saved Trace Viewer traces, settings and your HA login token. Data stored only in this browser may be lost.\n\nChoose “Clear caches only” instead to keep that data.\n\nContinue with a full reset?',
         confirmHardReload: 'Perform Hard Reload?\n\nThe page will be fully reloaded.\nUnsaved data may be lost.\n\nContinue?',
         logLsCleared: (n) => `\u2705 localStorage cleared (${n} keys deleted)`,
         logLsFailed: (n) => `\u26A0\uFE0F localStorage not fully cleared (${n} keys remain)`,
@@ -989,6 +993,12 @@ class HAPurgeCache extends HTMLElement {
     this._addLog(this._t.logPurgeDone, 'success');
     // The README documents "Clear EVERYTHING" as also hard-reloading the page
     // (listed as automatic). It never did — the reload was a separate button.
+    this._hardReload();
+  }
+
+  async _purgeCachesOnly() {
+    await this._purgeServiceWorkers();
+    await this._purgeCacheStorage();
     this._hardReload();
   }
 
@@ -1493,6 +1503,13 @@ class HAPurgeCache extends HTMLElement {
                   <div class="action-desc">${t.btnReloadToolsDesc}</div>
                 </div>
               </button>
+              <button class="action-btn primary" id="btn-purge-caches" aria-label="${t.btnPurgeCaches}">
+                <span class="action-icon">\u{1F9F9}</span>
+                <div>
+                  <div class="action-label">${t.btnPurgeCaches}</div>
+                  <div class="action-desc">${t.btnPurgeCachesDesc}</div>
+                </div>
+              </button>
               <button class="action-btn danger" id="btn-purge-all" aria-label="${t.btnPurgeAll}">
                 <span class="action-icon">\u{1F9F9}</span>
                 <div>
@@ -1557,6 +1574,7 @@ class HAPurgeCache extends HTMLElement {
     this.shadowRoot.querySelector('#btn-purge-cs').addEventListener('click', () => this._confirm(this._t.confirmCS, () => this._purgeCacheStorage()));
     this.shadowRoot.querySelector('#btn-reload-tools').addEventListener('click', () => this._forceReloadTools());
     this.shadowRoot.querySelector('#btn-purge-all').addEventListener('click', () => this._confirm(this._t.confirmAll, () => this._purgeAll()));
+    this.shadowRoot.querySelector('#btn-purge-caches').addEventListener('click', () => this._purgeCachesOnly());
     this.shadowRoot.querySelector('#btn-hard-reload').addEventListener('click', () => this._confirm(this._t.confirmHardReload, () => this._hardReload()));
 
     // Toggle LS keys

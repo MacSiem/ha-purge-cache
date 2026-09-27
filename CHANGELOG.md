@@ -1,3 +1,8 @@
+## Unreleased
+
+- Add "Clear caches only" to remove Service Workers and Cache Storage without deleting login or saved HA Tools data.
+- Warn explicitly that localStorage and full reset remove Baby Tracker records and saved Trace Viewer traces.
+
 ## 4.1.14 (2026-09-01)
 
 - Fixed the card crossing its Home Assistant Sections row boundary when the help panel or dynamic content makes it taller than six grid rows.
