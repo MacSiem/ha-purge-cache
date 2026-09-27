@@ -504,17 +504,10 @@ pre {
 `;
 const _esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 // Card-owned support footer. Never mutates document or foreign cards.
-const _LOCAL_DONATE_HTML = ''
-  + '<div class="donate-section" data-source="ha-purge-cache">'
-  + '  <div class="donate-text">'
-  + '    <h3>❤️ Support HA Tools Development</h3>'
-  + '    <p>If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!</p>'
-  + '  </div>'
-  + '  <div class="donate-buttons">'
-  + '    <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>'
-  + '    <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>'
-  + '  </div>'
-  + '</div>';
+const _LOCAL_SUPPORT_KEY = 'ha-purge-cache-support-dismissed';
+const _LOCAL_DONATE_HTML = '<div class="donate-section" data-source="own-card" style="margin:8px 0;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px"><span>❤️ Support HA Tools:</span><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">Buy Me a Coffee</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto">×</button></div>';
+function _localSupportDismissed() { try { return localStorage.getItem(_LOCAL_SUPPORT_KEY) === '1'; } catch (_) { return false; } }
+function _bindLocalSupportDismiss(root) { root.querySelector('.support-dismiss')?.addEventListener('click', () => { try { localStorage.setItem(_LOCAL_SUPPORT_KEY, '1'); } catch (_) {} root.querySelector('.donate-section[data-source="own-card"]')?.remove(); }); }
 /* ============================================================ */
 
 class HAPurgeCache extends HTMLElement {
@@ -525,7 +518,7 @@ class HAPurgeCache extends HTMLElement {
   getGridOptions() { return { columns: 12, min_columns: 6 }; }
 
   static getStubConfig() { return { type: 'custom:ha-purge-cache', title: 'Purge Cache' }; }
-  setConfig(config) { this._config = config || {}; }
+  setConfig(config) { this._config = config || {}; if (this._rendered && this._hass) this._render(); }
   constructor() {
     super();
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
@@ -1547,9 +1540,10 @@ class HAPurgeCache extends HTMLElement {
         </div>
       
         </div>
-        ${_LOCAL_DONATE_HTML}
+        ${this._hass?.user?.is_admin && this._config?.show_support !== false && !_localSupportDismissed() ? _LOCAL_DONATE_HTML : ''}
     `
 
+    _bindLocalSupportDismiss(this.shadowRoot);
     // Tip banner dismiss
     const tipBanner = this.shadowRoot.querySelector('#tip-banner');
     const tipVersion = 'purge-cache-tips-v1.0.0';
