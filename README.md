@@ -38,8 +38,9 @@ force-reload HA Tools scripts — from a Lovelace card.
 |---|---|
 | ![Main view, light theme](docs/screenshots/card-main-light.png) | ![Main view, dark theme](docs/screenshots/card-main-dark.png) |
 
-*Storage stats, the localStorage key browser and one-click cleanup actions.
-Dark mode follows your Home Assistant theme automatically.*
+*Synthetic browser storage stats, the localStorage key browser, separate
+cache-only action and explicit warning before deleting saved tool data. Dark
+mode follows your Home Assistant theme.*
 
 ## Installation
 
