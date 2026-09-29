@@ -1,4 +1,4 @@
-## Unreleased
+## 4.1.15 (2026-09-29)
 
 - Add "Clear caches only" to remove Service Workers and Cache Storage without deleting login or saved HA Tools data.
 - Warn explicitly that localStorage and full reset remove Baby Tracker records and saved Trace Viewer traces.
