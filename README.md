@@ -93,3 +93,9 @@ The optional in-card support link is shown only to administrators. Dismiss it in
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Privacy and data
+
+The card inspects browser storage for this Home Assistant origin. The cache-only action preserves localStorage; broader deletion choices can remove data saved by other cards. Read the confirmation and export important data first. Storage keys and values may contain private household information.
+
+See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
