@@ -3,6 +3,7 @@
   "version": "0.0.0-private",
   "private": true,
   "scripts": {
+    "test": "node --test tests/*.test.cjs",
     "test:smoke": "node .github/smoke.cjs"
   },
   "devDependencies": {
