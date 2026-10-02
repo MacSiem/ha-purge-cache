@@ -1561,13 +1561,13 @@ class HAPurgeCache extends HTMLElement {
     // Tip banner dismiss
     const tipBanner = this.shadowRoot.querySelector('#tip-banner');
     const tipVersion = 'purge-cache-tips-v1.0.0';
-    if (localStorage.getItem(tipVersion) === 'dismissed') {
-      tipBanner.classList.add('hidden');
-    }
+    try {
+      if (localStorage.getItem(tipVersion) === 'dismissed') tipBanner.classList.add('hidden');
+    } catch (_) { /* Storage denial must not prevent card initialization. */ }
     this.shadowRoot.querySelector('#tip-dismiss').addEventListener('click', (e) => {
       e.stopPropagation();
       tipBanner.classList.add('hidden');
-      localStorage.setItem(tipVersion, 'dismissed');
+      try { localStorage.setItem(tipVersion, 'dismissed'); } catch (_) { /* Dismiss remains usable for this card session. */ }
     });
 
     // Confirm overlay wiring
