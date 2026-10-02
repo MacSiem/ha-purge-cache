@@ -547,6 +547,7 @@ class HAPurgeCache extends HTMLElement {
         warningTitle: '\u26A0\uFE0F Uwaga:',
         warningText: 'Czyszczenie <strong>localStorage</strong> usunie logowanie i zapisane dane narz\u0119dzi, w tym lokalne rekordy Baby Tracker oraz trace z Trace Viewer. <strong>Service Workers</strong> i <strong>Cache Storage</strong> nie usuwaj\u0105 tych danych.',
         tipTitle: '\u{1F4A1} Jak korzysta\u0107?',
+        tipDismiss: 'Ukryj instrukcj\u0119',
         tip1: '<strong>localStorage</strong> \u2014 ustawienia panelu, HACS, frontend HA. Po czyszczeniu trzeba si\u0119 ponownie zalogowa\u0107.',
         tip2: '<strong>sessionStorage</strong> \u2014 dane bie\u017C\u0105cej sesji. Bezpieczne do czyszczenia.',
         tip3: '<strong>Service Workers</strong> \u2014 cache\'uj\u0105 zasoby offline. Wyrejestrowanie wymusza pobieranie \u015Bwie\u017Cych plik\u00F3w.',
@@ -608,6 +609,7 @@ class HAPurgeCache extends HTMLElement {
         warningTitle: '\u26A0\uFE0F Warning:',
         warningText: 'Clearing <strong>localStorage</strong> removes login and saved tool data, including local Baby Tracker records and Trace Viewer traces. <strong>Service Workers</strong> and <strong>Cache Storage</strong> keep that data.',
         tipTitle: '\u{1F4A1} How to use?',
+        tipDismiss: 'Dismiss instructions',
         tip1: '<strong>localStorage</strong> \u2014 panel settings, HACS, HA frontend. Clearing requires re-login.',
         tip2: '<strong>sessionStorage</strong> \u2014 current session data. Safe to clear.',
         tip3: '<strong>Service Workers</strong> \u2014 cache offline assets. Unregistering forces fresh file downloads.',
@@ -1425,7 +1427,7 @@ class HAPurgeCache extends HTMLElement {
         </div>
 
         <div class="tip-banner" id="tip-banner">
-          <button class="tip-dismiss" id="tip-dismiss" aria-label="Dismiss">\u2715</button>
+          <button class="tip-dismiss" id="tip-dismiss" aria-label="${t.tipDismiss}">\u2715</button>
           <div class="tip-banner-title">${t.tipTitle}</div>
           <ul>
             <li>${t.tip1}</li>

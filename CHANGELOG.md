@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Give the instruction dismissal button a descriptive accessible name in Polish and English; dismissal still works when browser storage denies persistence.
 - Count only confirmed service-worker unregister and cache-delete results; cache-only refresh preserves localStorage and sessionStorage.
 
 ## Unreleased
