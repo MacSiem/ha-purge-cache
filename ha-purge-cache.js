@@ -934,8 +934,7 @@ class HAPurgeCache extends HTMLElement {
       const regs = await navigator.serviceWorker.getRegistrations();
       let count = 0;
       for (const reg of regs) {
-        await reg.unregister();
-        count++;
+        if (await reg.unregister()) count++;
       }
       this._addLog(this._t.logSwUnregistered(count), 'success');
     } catch (e) {
@@ -954,8 +953,7 @@ class HAPurgeCache extends HTMLElement {
       const names = await caches.keys();
       let count = 0;
       for (const name of names) {
-        await caches.delete(name);
-        count++;
+        if (await caches.delete(name)) count++;
       }
       this._addLog(this._t.logCsDeleted(count), 'success');
     } catch (e) {

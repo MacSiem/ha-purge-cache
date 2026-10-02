@@ -1,5 +1,9 @@
 ## Unreleased
 
+- Count only confirmed service-worker unregister and cache-delete results; cache-only refresh preserves localStorage and sessionStorage.
+
+## Unreleased
+
 - Show a localized read failure instead of zero when browser storage, Service Workers or Cache Storage denies access. Keep measured empty storage at zero and unavailable HTTP APIs separate.
 - Preserve card and key-list rendering when localStorage becomes inaccessible; clearing behavior is unchanged.
 
