@@ -595,6 +595,7 @@ class HAPurgeCache extends HTMLElement {
         logSwUnavailable: '\u2139\uFE0F Service Workers niedost\u0119pne (HA na HTTP \u2014 wymaga HTTPS/localhost). Pomini\u0119to.',
         logCsUnavailable: '\u2139\uFE0F Cache Storage API niedost\u0119pne (HA na HTTP \u2014 wymaga HTTPS/localhost). Pomini\u0119to.',
         statUnavailable: 'n/d (HTTP)',
+        statReadFailed: 'Błąd odczytu',
         logNoPanel: '\u274C Nie znaleziono HA Tools Panel',
         logToolsReloaded: (n, t) => `\u2705 Prze\u0142adowano ${n}/${t} skrypt\u00F3w narz\u0119dzi (cache: no-store)`,
         logPurgeStart: '\u{1F9F9} Rozpoczynam pe\u0142ne czyszczenie...',
@@ -655,6 +656,7 @@ class HAPurgeCache extends HTMLElement {
         logSwUnavailable: '\u2139\uFE0F Service Workers unavailable (HA on HTTP \u2014 requires HTTPS/localhost). Skipped.',
         logCsUnavailable: '\u2139\uFE0F Cache Storage API unavailable (HA on HTTP \u2014 requires HTTPS/localhost). Skipped.',
         statUnavailable: 'n/a (HTTP)',
+        statReadFailed: 'Read failed',
         logNoPanel: '\u274C HA Tools Panel not found',
         logToolsReloaded: (n, t) => `\u2705 Reloaded ${n}/${t} tool scripts (cache: no-store)`,
         logPurgeStart: '\u{1F9F9} Starting full purge...',
@@ -703,7 +705,7 @@ class HAPurgeCache extends HTMLElement {
       }
       stats.localStorage = { count: lsCount, sizeKB: (lsSize / 1024).toFixed(1) };
     } catch (e) {
-      stats.localStorage = { count: 0, sizeKB: '0', error: e.message };
+      stats.localStorage = { count: null, sizeKB: null, error: e.message };
     }
 
     // sessionStorage
@@ -716,7 +718,7 @@ class HAPurgeCache extends HTMLElement {
       }
       stats.sessionStorage = { count: ssCount, sizeKB: (ssSize / 1024).toFixed(1) };
     } catch (e) {
-      stats.sessionStorage = { count: 0, sizeKB: '0', error: e.message };
+      stats.sessionStorage = { count: null, sizeKB: null, error: e.message };
     }
 
     // Service Workers (requires secure context)
@@ -727,7 +729,7 @@ class HAPurgeCache extends HTMLElement {
         const regs = await navigator.serviceWorker.getRegistrations();
         stats.serviceWorkers = { count: regs.length, scopes: regs.map(r => r.scope) };
       } catch (e) {
-        stats.serviceWorkers = { count: 0, scopes: [], error: e.message };
+        stats.serviceWorkers = { count: null, scopes: [], error: e.message };
       }
     }
 
@@ -746,7 +748,7 @@ class HAPurgeCache extends HTMLElement {
       }
       stats.cacheStorage = { count: names.length, caches: cacheDetails };
     } catch (e) {
-      stats.cacheStorage = { count: 0, caches: [], error: e.message };
+      stats.cacheStorage = { count: null, caches: [], error: e.message };
     }
     }
 
@@ -812,17 +814,23 @@ class HAPurgeCache extends HTMLElement {
     // Update stat cards
     const lsEl = root.querySelector('#stat-ls');
     if (lsEl && s.localStorage) {
-      lsEl.innerHTML = `<span class="stat-num">${s.localStorage.count}</span> ${t.statKeys} <span class="stat-sub">(${s.localStorage.sizeKB} KB)</span>`;
+      lsEl.innerHTML = s.localStorage.error
+        ? `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`
+        : `<span class="stat-num">${s.localStorage.count}</span> ${t.statKeys} <span class="stat-sub">(${s.localStorage.sizeKB} KB)</span>`;
     }
 
     const ssEl = root.querySelector('#stat-ss');
     if (ssEl && s.sessionStorage) {
-      ssEl.innerHTML = `<span class="stat-num">${s.sessionStorage.count}</span> ${t.statKeys} <span class="stat-sub">(${s.sessionStorage.sizeKB} KB)</span>`;
+      ssEl.innerHTML = s.sessionStorage.error
+        ? `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`
+        : `<span class="stat-num">${s.sessionStorage.count}</span> ${t.statKeys} <span class="stat-sub">(${s.sessionStorage.sizeKB} KB)</span>`;
     }
 
     const swEl = root.querySelector('#stat-sw');
     if (swEl && s.serviceWorkers) {
-      if (s.serviceWorkers.unavailable) {
+      if (s.serviceWorkers.error) {
+        swEl.innerHTML = `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`;
+      } else if (s.serviceWorkers.unavailable) {
         swEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub">${t.statUnavailable}</span>`;
       } else {
         swEl.innerHTML = `<span class="stat-num">${s.serviceWorkers.count}</span> ${t.statRegistered}`;
@@ -831,7 +839,9 @@ class HAPurgeCache extends HTMLElement {
 
     const csEl = root.querySelector('#stat-cs');
     if (csEl && s.cacheStorage) {
-      if (s.cacheStorage.unavailable) {
+      if (s.cacheStorage.error) {
+        csEl.innerHTML = `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`;
+      } else if (s.cacheStorage.unavailable) {
         csEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub">${t.statUnavailable}</span>`;
       } else {
       const total = s.cacheStorage.caches.reduce((sum, c) => sum + c.entries, 0);
@@ -861,13 +871,17 @@ class HAPurgeCache extends HTMLElement {
     const t = this._t;
     const escapeValue = (value) => this._esc(String(value == null ? '' : value));
 
+    const readFailed = () => { container.innerHTML = `<span class="stat-sub">${t.statReadFailed}</span>`; };
+    if (this._stats.localStorage?.error) { readFailed(); return; }
     const keys = [];
+    try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       const val = localStorage.getItem(key) || '';
       const sizeB = (key.length + val.length) * 2;
       keys.push({ key, sizeKB: (sizeB / 1024).toFixed(1), preview: val.substring(0, 60) });
     }
+    } catch (e) { readFailed(); return; }
     keys.sort((a, b) => parseFloat(b.sizeKB) - parseFloat(a.sizeKB));
 
     container.innerHTML = keys.map(k => `

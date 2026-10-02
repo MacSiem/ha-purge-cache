@@ -1,3 +1,8 @@
+## Unreleased
+
+- Show a localized read failure instead of zero when browser storage, Service Workers or Cache Storage denies access. Keep measured empty storage at zero and unavailable HTTP APIs separate.
+- Preserve card and key-list rendering when localStorage becomes inaccessible; clearing behavior is unchanged.
+
 ## 4.1.15 (2026-09-29)
 
 - Add "Clear caches only" to remove Service Workers and Cache Storage without deleting login or saved HA Tools data.
