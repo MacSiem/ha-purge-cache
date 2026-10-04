@@ -681,9 +681,44 @@ class HAPurgeCache extends HTMLElement {
       } else if (val && val.themes) { _d = !!val.themes.darkMode; }
       this.classList.toggle('bento-dark', _d);
     } catch (e) {}
+    const previousLanguage = this._lang;
+    const previousText = this._t;
     if (val?.language) this._lang = val.language.startsWith('pl') ? 'pl' : 'en';
     this._hass = val;
     if (!this._rendered) this._render();
+    else if (previousLanguage !== this._lang) this._refreshLocaleLabels(previousText);
+  }
+
+  _refreshLocaleLabels(previousText) {
+    const root = this.shadowRoot;
+    const t = this._t;
+    root.querySelectorAll("[data-locale-text]").forEach(node => {
+      node.textContent = t[node.dataset.localeText];
+    });
+    // These rich labels come exclusively from the fixed local dictionary.
+    root.querySelectorAll("[data-locale-rich]").forEach(node => {
+      node.innerHTML = t[node.dataset.localeRich];
+    });
+    root.querySelectorAll("[data-locale-aria]").forEach(node => {
+      node.setAttribute("aria-label", t[node.dataset.localeAria]);
+    });
+    root.querySelectorAll("button[data-key]").forEach(node => {
+      node.title = t.deleteKey;
+      node.setAttribute("aria-label", `${t.deleteKey}: ${node.getAttribute("data-key")}`);
+    });
+    const polish = this._lang === "pl";
+    const support = root.querySelector(".donate-section[data-source=own-card]");
+    if (support) {
+      support.querySelector("a").textContent = polish ? "Opcjonalne wsparcie HA Tools" : "Optional support for HA Tools";
+      support.querySelector(".support-dismiss").setAttribute("aria-label", polish ? "Ukryj link wsparcia" : "Dismiss support link");
+    }
+    root.querySelector(".confirm-dialog h3").textContent = polish ? "Potwierdzenie" : "Confirm";
+    root.querySelector("#confirm-cancel").textContent = polish ? "Anuluj" : "Cancel";
+    root.querySelector("#confirm-ok").textContent = polish ? "Wyczyść" : "Confirm";
+    const message = root.querySelector("#confirm-msg");
+    const key = ["confirmLS", "confirmSS", "confirmSW", "confirmCS", "confirmAll", "confirmHardReload"]
+      .find(key => message.textContent === previousText[key]);
+    if (key) message.textContent = t[key];
   }
 
   connectedCallback() {
@@ -817,44 +852,44 @@ class HAPurgeCache extends HTMLElement {
     const lsEl = root.querySelector('#stat-ls');
     if (lsEl && s.localStorage) {
       lsEl.innerHTML = s.localStorage.error
-        ? `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`
-        : `<span class="stat-num">${s.localStorage.count}</span> ${t.statKeys} <span class="stat-sub">(${s.localStorage.sizeKB} KB)</span>`;
+        ? `<span class="stat-num stat-unavail">—</span> <span class="stat-sub"><span data-locale-text="statReadFailed">${t.statReadFailed}</span></span>`
+        : `<span class="stat-num">${s.localStorage.count}</span> <span data-locale-text="statKeys">${t.statKeys}</span> <span class="stat-sub">(${s.localStorage.sizeKB} KB)</span>`;
     }
 
     const ssEl = root.querySelector('#stat-ss');
     if (ssEl && s.sessionStorage) {
       ssEl.innerHTML = s.sessionStorage.error
-        ? `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`
-        : `<span class="stat-num">${s.sessionStorage.count}</span> ${t.statKeys} <span class="stat-sub">(${s.sessionStorage.sizeKB} KB)</span>`;
+        ? `<span class="stat-num stat-unavail">—</span> <span class="stat-sub"><span data-locale-text="statReadFailed">${t.statReadFailed}</span></span>`
+        : `<span class="stat-num">${s.sessionStorage.count}</span> <span data-locale-text="statKeys">${t.statKeys}</span> <span class="stat-sub">(${s.sessionStorage.sizeKB} KB)</span>`;
     }
 
     const swEl = root.querySelector('#stat-sw');
     if (swEl && s.serviceWorkers) {
       if (s.serviceWorkers.error) {
-        swEl.innerHTML = `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`;
+        swEl.innerHTML = `<span class="stat-num stat-unavail">—</span> <span class="stat-sub"><span data-locale-text="statReadFailed">${t.statReadFailed}</span></span>`;
       } else if (s.serviceWorkers.unavailable) {
-        swEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub">${t.statUnavailable}</span>`;
+        swEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub"><span data-locale-text="statUnavailable">${t.statUnavailable}</span></span>`;
       } else {
-        swEl.innerHTML = `<span class="stat-num">${s.serviceWorkers.count}</span> ${t.statRegistered}`;
+        swEl.innerHTML = `<span class="stat-num">${s.serviceWorkers.count}</span> <span data-locale-text="statRegistered">${t.statRegistered}</span>`;
       }
     }
 
     const csEl = root.querySelector('#stat-cs');
     if (csEl && s.cacheStorage) {
       if (s.cacheStorage.error) {
-        csEl.innerHTML = `<span class="stat-num stat-unavail">—</span> <span class="stat-sub">${t.statReadFailed}</span>`;
+        csEl.innerHTML = `<span class="stat-num stat-unavail">—</span> <span class="stat-sub"><span data-locale-text="statReadFailed">${t.statReadFailed}</span></span>`;
       } else if (s.cacheStorage.unavailable) {
-        csEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub">${t.statUnavailable}</span>`;
+        csEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub"><span data-locale-text="statUnavailable">${t.statUnavailable}</span></span>`;
       } else {
       const total = s.cacheStorage.caches.reduce((sum, c) => sum + c.entries, 0);
-      csEl.innerHTML = `<span class="stat-num">${s.cacheStorage.count}</span> ${t.statCaches} <span class="stat-sub">(${total} ${t.statEntries})</span>`;
+      csEl.innerHTML = `<span class="stat-num">${s.cacheStorage.count}</span> <span data-locale-text="statCaches">${t.statCaches}</span> <span class="stat-sub">(${total} <span data-locale-text="statEntries">${t.statEntries}</span>)</span>`;
       }
     }
 
     const tsEl = root.querySelector('#stat-ts');
     if (tsEl && s.toolScripts) {
       const count = Number.isInteger(s.toolScripts.count) ? s.toolScripts.count : 'N/A';
-      tsEl.innerHTML = `<span class="stat-num">${count}</span> ${t.statScripts}`;
+      tsEl.innerHTML = `<span class="stat-num">${count}</span> <span data-locale-text="statScripts">${t.statScripts}</span>`;
     }
 
     // HA version
@@ -873,7 +908,7 @@ class HAPurgeCache extends HTMLElement {
     const t = this._t;
     const escapeValue = (value) => this._esc(String(value == null ? '' : value));
 
-    const readFailed = () => { container.innerHTML = `<span class="stat-sub">${t.statReadFailed}</span>`; };
+    const readFailed = () => { container.innerHTML = `<span class="stat-sub"><span data-locale-text="statReadFailed">${t.statReadFailed}</span></span>`; };
     if (this._stats.localStorage?.error) { readFailed(); return; }
     const keys = [];
     try {
@@ -1421,21 +1456,21 @@ class HAPurgeCache extends HTMLElement {
 
       <div class="card">
         <h2>\u{1F9F9} Purge Cache <span class="ha-ver">HA <span id="ha-version">...</span></span></h2>
-        <div class="subtitle">${t.subtitle}</div>
+        <div class="subtitle" data-locale-text="subtitle">${t.subtitle}</div>
         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:12px 14px;margin:8px 0;font-size:12px;line-height:1.6;color:var(--bento-text,#1e293b)">
-          <strong>${t.warningTitle}</strong> ${t.warningText}
+          <strong data-locale-text="warningTitle">${t.warningTitle}</strong> <span data-locale-rich="warningText">${t.warningText}</span>
         </div>
 
         <div class="tip-banner" id="tip-banner">
-          <button class="tip-dismiss" id="tip-dismiss" aria-label="${t.tipDismiss}">\u2715</button>
-          <div class="tip-banner-title">${t.tipTitle}</div>
+          <button class="tip-dismiss" id="tip-dismiss" aria-label="${t.tipDismiss}" data-locale-aria="tipDismiss">\u2715</button>
+          <div class="tip-banner-title" data-locale-text="tipTitle">${t.tipTitle}</div>
           <ul>
-            <li>${t.tip1}</li>
-            <li>${t.tip2}</li>
-            <li>${t.tip3}</li>
-            <li>${t.tip4}</li>
-            <li>${t.tip5}</li>
-            <li>${t.tip6}</li>
+            <li data-locale-rich="tip1">${t.tip1}</li>
+            <li data-locale-rich="tip2">${t.tip2}</li>
+            <li data-locale-rich="tip3">${t.tip3}</li>
+            <li data-locale-rich="tip4">${t.tip4}</li>
+            <li data-locale-rich="tip5">${t.tip5}</li>
+            <li data-locale-rich="tip6">${t.tip6}</li>
           </ul>
         </div>
 
@@ -1466,7 +1501,7 @@ class HAPurgeCache extends HTMLElement {
 
             <div class="keys-section">
               <div class="keys-header" id="keys-toggle">
-                <span>${t.lsKeysHeader}</span>
+                <span data-locale-text="lsKeysHeader">${t.lsKeysHeader}</span>
                 <span class="chevron">\u25BE</span>
               </div>
               <div id="ls-keys"></div>
@@ -1475,66 +1510,66 @@ class HAPurgeCache extends HTMLElement {
 
           <div class="cache-col">
             <div class="actions-grid">
-              <button class="action-btn" id="btn-purge-ls" aria-label="${t.btnPurgeLS}">
+              <button class="action-btn" id="btn-purge-ls" aria-label="${t.btnPurgeLS}" data-locale-aria="btnPurgeLS">
                 <span class="action-icon">\u{1F5D1}\uFE0F</span>
                 <div>
-                  <div class="action-label">${t.btnPurgeLS}</div>
-                  <div class="action-desc">${t.btnPurgeLSDesc}</div>
+                  <div class="action-label" data-locale-text="btnPurgeLS">${t.btnPurgeLS}</div>
+                  <div class="action-desc" data-locale-text="btnPurgeLSDesc">${t.btnPurgeLSDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-purge-ss" aria-label="${t.btnPurgeSS}">
+              <button class="action-btn" id="btn-purge-ss" aria-label="${t.btnPurgeSS}" data-locale-aria="btnPurgeSS">
                 <span class="action-icon">\u{1F4CB}</span>
                 <div>
-                  <div class="action-label">${t.btnPurgeSS}</div>
-                  <div class="action-desc">${t.btnPurgeSSDesc}</div>
+                  <div class="action-label" data-locale-text="btnPurgeSS">${t.btnPurgeSS}</div>
+                  <div class="action-desc" data-locale-text="btnPurgeSSDesc">${t.btnPurgeSSDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-purge-sw" aria-label="${t.btnPurgeSW}">
+              <button class="action-btn" id="btn-purge-sw" aria-label="${t.btnPurgeSW}" data-locale-aria="btnPurgeSW">
                 <span class="action-icon">\u2699\uFE0F</span>
                 <div>
-                  <div class="action-label">${t.btnPurgeSW}</div>
-                  <div class="action-desc">${t.btnPurgeSWDesc}</div>
+                  <div class="action-label" data-locale-text="btnPurgeSW">${t.btnPurgeSW}</div>
+                  <div class="action-desc" data-locale-text="btnPurgeSWDesc">${t.btnPurgeSWDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-purge-cs" aria-label="${t.btnPurgeCS}">
+              <button class="action-btn" id="btn-purge-cs" aria-label="${t.btnPurgeCS}" data-locale-aria="btnPurgeCS">
                 <span class="action-icon">\u{1F4E6}</span>
                 <div>
-                  <div class="action-label">${t.btnPurgeCS}</div>
-                  <div class="action-desc">${t.btnPurgeCSDesc}</div>
+                  <div class="action-label" data-locale-text="btnPurgeCS">${t.btnPurgeCS}</div>
+                  <div class="action-desc" data-locale-text="btnPurgeCSDesc">${t.btnPurgeCSDesc}</div>
                 </div>
               </button>
-              <button class="action-btn" id="btn-reload-tools" aria-label="${t.btnReloadTools}">
+              <button class="action-btn" id="btn-reload-tools" aria-label="${t.btnReloadTools}" data-locale-aria="btnReloadTools">
                 <span class="action-icon">\u{1F504}</span>
                 <div>
-                  <div class="action-label">${t.btnReloadTools}</div>
-                  <div class="action-desc">${t.btnReloadToolsDesc}</div>
+                  <div class="action-label" data-locale-text="btnReloadTools">${t.btnReloadTools}</div>
+                  <div class="action-desc" data-locale-text="btnReloadToolsDesc">${t.btnReloadToolsDesc}</div>
                 </div>
               </button>
-              <button class="action-btn primary" id="btn-purge-caches" aria-label="${t.btnPurgeCaches}">
+              <button class="action-btn primary" id="btn-purge-caches" aria-label="${t.btnPurgeCaches}" data-locale-aria="btnPurgeCaches">
                 <span class="action-icon">\u{1F9F9}</span>
                 <div>
-                  <div class="action-label">${t.btnPurgeCaches}</div>
-                  <div class="action-desc">${t.btnPurgeCachesDesc}</div>
+                  <div class="action-label" data-locale-text="btnPurgeCaches">${t.btnPurgeCaches}</div>
+                  <div class="action-desc" data-locale-text="btnPurgeCachesDesc">${t.btnPurgeCachesDesc}</div>
                 </div>
               </button>
-              <button class="action-btn danger" id="btn-purge-all" aria-label="${t.btnPurgeAll}">
+              <button class="action-btn danger" id="btn-purge-all" aria-label="${t.btnPurgeAll}" data-locale-aria="btnPurgeAll">
                 <span class="action-icon">\u{1F9F9}</span>
                 <div>
-                  <div class="action-label">${t.btnPurgeAll}</div>
-                  <div class="action-desc">${t.btnPurgeAllDesc}</div>
+                  <div class="action-label" data-locale-text="btnPurgeAll">${t.btnPurgeAll}</div>
+                  <div class="action-desc" data-locale-text="btnPurgeAllDesc">${t.btnPurgeAllDesc}</div>
                 </div>
               </button>
-              <button class="action-btn primary" id="btn-hard-reload" aria-label="${t.btnHardReload}">
+              <button class="action-btn primary" id="btn-hard-reload" aria-label="${t.btnHardReload}" data-locale-aria="btnHardReload">
                 <span class="action-icon">\u26A1</span>
                 <div>
-                  <div class="action-label">${t.btnHardReload}</div>
-                  <div class="action-desc">${t.btnHardReloadDesc}</div>
+                  <div class="action-label" data-locale-text="btnHardReload">${t.btnHardReload}</div>
+                  <div class="action-desc" data-locale-text="btnHardReloadDesc">${t.btnHardReloadDesc}</div>
                 </div>
               </button>
             </div>
 
             <div class="log-section">
-              <div class="log-header">${t.logHeader}</div>
+              <div class="log-header" data-locale-text="logHeader">${t.logHeader}</div>
               <div id="action-log">
                 <div class="log-entry log-info"><span class="log-time">${new Date().toLocaleTimeString(this._lang === 'pl' ? 'pl-PL' : 'en-US')}</span> ${t.logReady}</div>
               </div>
@@ -1554,7 +1589,7 @@ class HAPurgeCache extends HTMLElement {
         </div>
       
         </div>
-        ${this._hass?.user?.is_admin && this._config?.show_support !== false && !_localSupportDismissed() ? _LOCAL_DONATE_HTML : ''}
+        ${this._hass?.user?.is_admin && this._config?.show_support !== false && !_localSupportDismissed() ? (this._lang === 'pl' ? _LOCAL_DONATE_HTML.replace('Optional support for HA Tools', 'Opcjonalne wsparcie HA Tools').replace('Dismiss support link', 'Ukryj link wsparcia') : _LOCAL_DONATE_HTML) : ''}
     `
 
     _bindLocalSupportDismiss(this.shadowRoot);

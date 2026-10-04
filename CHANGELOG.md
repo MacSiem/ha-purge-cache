@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Refresh Polish and English labels in place when Home Assistant changes language, preserving focus, cached statistics, expanded sections, logs, dismissed guidance and pending confirmations without reading storage or clearing data.
 - Give the instruction dismissal button a descriptive accessible name in Polish and English; dismissal still works when browser storage denies persistence.
 - Count only confirmed service-worker unregister and cache-delete results; cache-only refresh preserves localStorage and sessionStorage.
 

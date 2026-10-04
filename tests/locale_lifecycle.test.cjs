@@ -93,3 +93,46 @@ test('custom pending messages, callbacks, and historical log remain literal acro
     assert.equal(root.getElementById('action-log').innerHTML, log);
   } finally { f.dom.window.close(); }
 });
+
+test('cached statistics and key controls translate without reading or replacing stored rows', () => {
+  const f = fixture();
+  try {
+    const { card, root } = f;
+    f.dom.window.localStorage.setItem('authored-key', 'authored-value');
+    card._stats = { localStorage: { count: 1, sizeKB: '0.1' }, serviceWorkers: { unavailable: true } };
+    card._updateDisplay();
+    const row = root.querySelector('.key-row');
+    const deletion = row.querySelector('button');
+    const number = root.querySelector('#stat-ls .stat-num');
+    deletion.focus();
+    Object.defineProperty(f.dom.window, 'localStorage', { get() { throw Error('locale must not read storage'); }, configurable: true });
+    card.hass = { language: 'pl-PL', user: { is_admin: true } };
+    assert.equal(root.querySelector('#stat-ls [data-locale-text]').textContent, card._t.statKeys);
+    assert.equal(root.querySelector('#stat-sw [data-locale-text]').textContent, card._t.statUnavailable);
+    assert.equal(deletion.getAttribute('aria-label'), `${card._t.deleteKey}: authored-key`);
+    assert.equal(root.querySelector('.key-row'), row);
+    assert.equal(root.querySelector('#stat-ls .stat-num'), number);
+    assert.equal(root.activeElement, deletion);
+    assert.equal(row.querySelector('.key-name').textContent, 'authored-key');
+  } finally { f.dom.window.close(); }
+});
+
+test('existing support and every action description follow ordinary language changes', () => {
+  const f = fixture();
+  try {
+    const { card, root } = f;
+    const support = root.querySelector('.donate-section');
+    const link = support.querySelector('a');
+    for (const language of ['pl-PL', 'en']) {
+      card.hass = { language, user: { is_admin: true } };
+      for (const suffix of ['PurgeLS', 'PurgeSS', 'PurgeSW', 'PurgeCS', 'ReloadTools', 'PurgeCaches', 'PurgeAll', 'HardReload']) {
+        assert.equal(root.querySelector(`[data-locale-text="btn${suffix}"]`).textContent, card._t[`btn${suffix}`]);
+        assert.equal(root.querySelector(`[data-locale-text="btn${suffix}Desc"]`).textContent, card._t[`btn${suffix}Desc`]);
+      }
+      assert.equal(root.querySelector('[data-locale-rich="warningText"]').innerHTML, card._t.warningText);
+      assert.equal(link.textContent, language.startsWith('pl') ? 'Opcjonalne wsparcie HA Tools' : 'Optional support for HA Tools');
+      assert.equal(support.querySelector('a'), link);
+      assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
+    }
+  } finally { f.dom.window.close(); }
+});
