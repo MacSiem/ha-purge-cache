@@ -52,3 +52,19 @@ test('successful single-key deletion keeps other data and gives focus to the key
   assert.equal(root.activeElement,root.querySelector('#keys-toggle'));
  }finally{dom.window.close();}
 });
+
+for(const denied of [false,true]) test(`stats collected before hass remain visible on first render (denied=${denied})`,async()=>{
+ const dom=new JSDOM('',{url:'http://localhost/',runScripts:'dangerously'});const w=dom.window;
+ try{
+  w.eval(source);if(denied)Object.defineProperty(w.navigator,'serviceWorker',{get(){throw new w.DOMException('denied','SecurityError')},configurable:true});
+  const card=w.document.createElement('ha-purge-cache');w.document.body.append(card);await card._collectStats();
+  card.hass={language:'en',states:{},user:{is_admin:false}};
+  assert.match(card.shadowRoot.querySelector('#stat-sw').textContent,denied?/Read failed/:/unavailable/);
+  assert.doesNotMatch(card.shadowRoot.querySelector('#stat-ls').textContent,/•••/);
+ }finally{dom.window.close();}
+});
+test('configuration render retains measured stats and existing action history',async()=>{
+ const {dom,card,root}=setup();try{await card._collectStats();card._addLog('Recorded action','info');card.setConfig({title:'Changed title'});
+ assert.match(root.querySelector('#stat-ls').textContent,/0/);assert.match(root.querySelector('#action-log').textContent,/Recorded action/);
+ }finally{dom.window.close();}
+});
