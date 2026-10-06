@@ -1,13 +1,13 @@
-/* HA Tools split — ha-purge-cache v4.1.15 (2026-09-29) — single-tool standalone repo */
+/* HA Tools split — ha-purge-cache v4.1.15 (2026-10-06) — single-tool standalone repo */
 (function() {
 'use strict';
 
 /**
- * HA Purge Cache v1.0.0
+ * Standalone Purge Cache card
  * Tool for clearing browser cache, localStorage, service workers,
  * and force-reloading HA Tools scripts.
  *
- * Part of HA Tools Panel — Advanced Tools group.
+ * Browser-local tools for the current Home Assistant origin.
  */
 
 /* ===== HA Tools split — inline shared infrastructure ===== */
@@ -530,13 +530,24 @@ class HAPurgeCache extends HTMLElement {
     this._reloadTimer = null;
   }
 
-  _confirm(message, onConfirm) {
+  _confirm(message, onConfirm, keyName = null) {
     const overlay = this.shadowRoot?.querySelector('#confirm-overlay');
     const msgEl = this.shadowRoot?.querySelector('#confirm-msg');
     if (!overlay || !msgEl) { if (confirm(message)) onConfirm(); return; }
     msgEl.textContent = message;
     overlay.style.display = 'flex';
     this._pendingConfirm = onConfirm;
+    this._confirmKeyName = keyName;
+    this._confirmOrigin = this.shadowRoot.activeElement;
+    this.shadowRoot.querySelector('#confirm-cancel').focus();
+  }
+
+  _closeConfirm() {
+    this.shadowRoot.querySelector('#confirm-overlay').style.display = 'none';
+    this._pendingConfirm = null;
+    this._confirmKeyName = null;
+    this._confirmOrigin?.focus();
+    this._confirmOrigin = null;
   }
 
   get _t() {
@@ -545,31 +556,31 @@ class HAPurgeCache extends HTMLElement {
         title: 'Wyczy\u015B\u0107 Cache',
         subtitle: 'Wyczy\u015B\u0107 cache przegl\u0105darki, Service Workers, localStorage i skrypty narz\u0119dzi.',
         warningTitle: '\u26A0\uFE0F Uwaga:',
-        warningText: 'Czyszczenie <strong>localStorage</strong> usunie logowanie i zapisane dane narz\u0119dzi, w tym lokalne rekordy Baby Tracker oraz trace z Trace Viewer. <strong>Service Workers</strong> i <strong>Cache Storage</strong> nie usuwaj\u0105 tych danych.',
+        warningText: 'Czyszczenie <strong>localStorage</strong> usunie logowanie i zapisane dane narz\u0119dzi, w tym lokalne rekordy Baby Tracker oraz trace z Trace Viewer oraz dane Sentence Manager. Najpierw wyeksportuj ważne dane z odpowiedniego narzędzia. <strong>Service Workers</strong> i <strong>Cache Storage</strong> nie usuwaj\u0105 tych danych.',
         tipTitle: '\u{1F4A1} Jak korzysta\u0107?',
         tipDismiss: 'Ukryj instrukcj\u0119',
         tip1: '<strong>localStorage</strong> \u2014 ustawienia panelu, HACS, frontend HA. Po czyszczeniu trzeba si\u0119 ponownie zalogowa\u0107.',
-        tip2: '<strong>sessionStorage</strong> \u2014 dane bie\u017C\u0105cej sesji. Bezpieczne do czyszczenia.',
-        tip3: '<strong>Service Workers</strong> \u2014 cache\'uj\u0105 zasoby offline. Wyrejestrowanie wymusza pobieranie \u015Bwie\u017Cych plik\u00F3w.',
+        tip2: '<strong>sessionStorage</strong> \u2014 dane bie\u017C\u0105cej sesji. Czyszczenie usuwa dane sesji.',
+        tip3: '<strong>Service Workers</strong> \u2014 cache\'uj\u0105 zasoby offline. Wyrejestrowanie usuwa rejestracje; przeładuj stronę, aby zakończyć ich działanie.',
         tip4: '<strong>Cache Storage</strong> \u2014 API cache przegl\u0105darki. Usuni\u0119cie zwalnia miejsce.',
-        tip5: '<strong>Prze\u0142aduj skrypty</strong> \u2014 wymusza ponowne pobranie wszystkich .js narz\u0119dzi z serwera.',
+        tip5: '<strong>Prze\u0142aduj skrypty</strong> \u2014 pobiera ponownie wykryte skrypty HACS. Nie uruchamia ich i nie czyści cache HTTP.',
         tip6: '<strong>\u26A0\uFE0F Wyczy\u015B\u0107 WSZYSTKO</strong> \u2014 uruchamia wszystkie powy\u017Csze + hard reload. U\u017Cyj je\u015Bli narz\u0119dzia nie \u0142aduj\u0105 si\u0119 prawid\u0142owo.',
         btnPurgeLS: 'Wyczy\u015B\u0107 localStorage',
         btnPurgeLSDesc: 'Wylogowanie + reset ustawie\u0144 panelu',
         btnPurgeSS: 'Wyczy\u015B\u0107 sessionStorage',
-        btnPurgeSSDesc: 'Dane sesji \u2014 bezpieczne, bez wylogowania',
+        btnPurgeSSDesc: 'Dane sesji \u2014 usuwa dane, bez wylogowania',
         btnPurgeSW: 'Wyrejestruj Service Workers',
         btnPurgeSWDesc: 'Offline cache \u2014 bez wylogowania',
         btnPurgeCS: 'Usu\u0144 Cache Storage',
         btnPurgeCSDesc: 'Zwolni miejsce \u2014 bez wylogowania',
         btnReloadTools: 'Prze\u0142aduj skrypty narz\u0119dzi',
-        btnReloadToolsDesc: 'Force fetch z cache: no-store',
+        btnReloadToolsDesc: 'Pobierz świeże kopie wykrytych skryptów HACS',
         btnPurgeAll: 'Wyczy\u015B\u0107 WSZYSTKO',
         btnPurgeAllDesc: '\u26A0\uFE0F Usuwa te\u017C zapisane dane narz\u0119dzi',
         btnPurgeCaches: 'Wyczy\u015B\u0107 tylko cache',
         btnPurgeCachesDesc: 'Zachowaj logowanie i dane HA Tools',
         btnHardReload: 'Hard Reload',
-        btnHardReloadDesc: 'Ctrl+Shift+R \u2014 pe\u0142ne prze\u0142adowanie',
+        btnHardReloadDesc: 'Przeładowanie strony z nowym URL',
         logHeader: 'Akcje',
         logReady: 'Purge Cache gotowy. Wybierz akcj\u0119.',
         lsKeysHeader: 'localStorage \u2014 klucze',
@@ -579,11 +590,11 @@ class HAPurgeCache extends HTMLElement {
         statEntries: 'wpis\u00F3w',
         statScripts: 'skrypt\u00F3w',
         deleteKey: 'Usu\u0144 ten klucz',
-        confirmLS: 'Wyczy\u015Bci\u0107 localStorage?\n\n\u26A0\uFE0F Utracisz token logowania, ustawienia oraz lokalne rekordy Baby Tracker i zapisane trace z Trace Viewer. Dane bez kopii w HA mog\u0105 przepa\u015B\u0107.\n\nWybierz „Wyczy\u015B\u0107 tylko cache”, aby je zachowa\u0107. Kontynuowa\u0107?',
-        confirmSS: 'Wyczy\u015Bci\u0107 sessionStorage?\n\n\u{1F4CB} Utracone dane:\n\u2022 Dane bie\u017C\u0105cej sesji (formularze, stany tymczasowe)\n\u2022 Nie wymaga ponownego logowania\n\nCzy kontynuowa\u0107?',
-        confirmSW: 'Wyrejestrowa\u0107 Service Workers?\n\n\u2699\uFE0F Efekt:\n\u2022 Usuni\u0119cie offline cache \u2014 zasoby b\u0119d\u0105 \u0142adowane z serwera\n\u2022 Nie wymaga ponownego logowania\n\u2022 Mo\u017Ce spowolni\u0107 pierwsze \u0142adowanie\n\nCzy kontynuowa\u0107?',
-        confirmCS: 'Usun\u0105\u0107 Cache Storage?\n\n\u{1F4E6} Efekt:\n\u2022 Usuni\u0119cie cache API przegl\u0105darki\n\u2022 Nie wymaga ponownego logowania\n\u2022 Zwolni miejsce\n\nCzy kontynuowa\u0107?',
-        confirmAll: '\u{1F9F9} Wyczy\u015Bci\u0107 WSZYSTKO?\n\n\u26A0\uFE0F Nieodwracalnie usuniesz lokalne dane, w tym zapisy Baby Tracker, zapisane trace z Trace Viewer, ustawienia i token logowania HA. Dane, kt\u00F3re istniej\u0105 tylko w tej przegl\u0105darce, mog\u0105 przepa\u015B\u0107.\n\nZamiast tego wybierz „Wyczy\u015B\u0107 tylko cache”, aby zachowa\u0107 dane.\n\nKontynuowa\u0107 pe\u0142ny reset?',
+        confirmLS: 'Wyczy\u015Bci\u0107 localStorage?\n\n\u26A0\uFE0F Utracisz token logowania, ustawienia oraz lokalne rekordy Baby Tracker i zapisane trace z Trace Viewer oraz dane Sentence Manager. Dane bez kopii w HA mog\u0105 przepa\u015B\u0107.\n\nWybierz „Wyczy\u015B\u0107 tylko cache”, aby je zachowa\u0107. Kontynuowa\u0107?',
+        confirmSS: 'Wyczy\u015Bci\u0107 sessionStorage?\n\n\u{1F4CB} Utracone dane:\n\u2022 Dane bie\u017C\u0105cej sesji (formularze, stany tymczasowe)\n\u2022 Logowanie HA zwykle pozostaje\n\nCzy kontynuowa\u0107?',
+        confirmSW: 'Wyrejestrowa\u0107 Service Workers?\n\n\u2699\uFE0F Efekt:\n\u2022 Usuwa rejestracje; przeładuj stronę, aby zakończyć działanie workerów\n\u2022 Logowanie i zapisane dane przeglądarki pozostają\n\u2022 Mo\u017Ce spowolni\u0107 pierwsze \u0142adowanie\n\nCzy kontynuowa\u0107?',
+        confirmCS: 'Usun\u0105\u0107 Cache Storage?\n\n\u{1F4E6} Efekt:\n\u2022 Usuni\u0119cie cache API przegl\u0105darki\n\u2022 Logowanie i zapisane dane przeglądarki pozostają\n\u2022 Zwolni miejsce\n\nCzy kontynuowa\u0107?',
+        confirmAll: '\u{1F9F9} Wyczy\u015Bci\u0107 WSZYSTKO?\n\n\u26A0\uFE0F Nieodwracalnie usuniesz lokalne dane, w tym zapisy Baby Tracker, zapisane trace z Trace Viewer, dane Sentence Manager, ustawienia i token logowania HA. Dane, kt\u00F3re istniej\u0105 tylko w tej przegl\u0105darce, mog\u0105 przepa\u015B\u0107.\n\nZamiast tego wybierz „Wyczy\u015B\u0107 tylko cache”, aby zachowa\u0107 dane.\n\nKontynuowa\u0107 pe\u0142ny reset?',
         confirmHardReload: 'Wykona\u0107 Hard Reload?\n\nStrona zostanie ca\u0142kowicie prze\u0142adowana.\nNiezapisane dane mog\u0105 zosta\u0107 utracone.\n\nCzy kontynuowa\u0107?',
         logLsCleared: (n) => `\u2705 localStorage wyczyszczony (${n} kluczy usuni\u0119tych)`,
         logLsFailed: (n) => `\u26A0\uFE0F localStorage nie zosta\u0142 w pe\u0142ni wyczyszczony (${n} kluczy pozosta\u0142o)`,
@@ -593,45 +604,48 @@ class HAPurgeCache extends HTMLElement {
         logSwError: (msg) => `\u274C B\u0142\u0105d SW: ${msg}`,
         logCsDeleted: (n) => `\u2705 ${n} Cache Storage usuni\u0119tych`,
         logCsError: (msg) => `\u274C B\u0142\u0105d Cache: ${msg}`,
-        logSwUnavailable: '\u2139\uFE0F Service Workers niedost\u0119pne (HA na HTTP \u2014 wymaga HTTPS/localhost). Pomini\u0119to.',
-        logCsUnavailable: '\u2139\uFE0F Cache Storage API niedost\u0119pne (HA na HTTP \u2014 wymaga HTTPS/localhost). Pomini\u0119to.',
-        statUnavailable: 'n/d (HTTP)',
+        logSwUnavailable: '\u2139\uFE0F Service Workers niedost\u0119pne (wymaga obsługi w przeglądarce oraz HTTPS/localhost). Pomini\u0119to.',
+        logCsUnavailable: '\u2139\uFE0F Cache Storage API niedost\u0119pne (wymaga obsługi w przeglądarce oraz HTTPS/localhost). Pomini\u0119to.',
+        statUnavailable: 'niedostępne',
         statReadFailed: 'Błąd odczytu',
-        logNoPanel: '\u274C Nie znaleziono HA Tools Panel',
-        logToolsReloaded: (n, t) => `\u2705 Prze\u0142adowano ${n}/${t} skrypt\u00F3w narz\u0119dzi (cache: no-store)`,
+        logNoPanel: 'Nie znaleziono załadowanych skryptów HA Tools',
+        logToolsReloaded: (n, t) => `${n === t ? '\u2705' : '\u26A0'} Pobrano ponownie ${n}/${t} skrypt\u00F3w narz\u0119dzi (cache: no-store)`,
+        logStorageError: (msg) => `Błąd pamięci przeglądarki: ${msg}`,
+        logPurgeIncomplete: 'Czyszczenie niepełne. Błędy pozostają widoczne; ponów akcję lub przeładuj ręcznie.',
+        confirmKey: (key) => `Usunąć klucz ${key}? Zapisane dane lub logowanie mogą przepaść. Anuluj, aby je zachować.`,
         logPurgeStart: '\u{1F9F9} Rozpoczynam pe\u0142ne czyszczenie...',
-        logPurgeDone: '\u{1F389} Gotowe! Zalecany hard reload (Ctrl+Shift+R)',
+        logPurgeDone: '\u{1F389} Gotowe! Przeładowuję stronę.',
         logHardReload: '\u{1F504} Hard reload za 1s...',
       },
       en: {
         title: 'Purge Cache',
         subtitle: 'Clear browser cache, Service Workers, localStorage and tool scripts.',
         warningTitle: '\u26A0\uFE0F Warning:',
-        warningText: 'Clearing <strong>localStorage</strong> removes login and saved tool data, including local Baby Tracker records and Trace Viewer traces. <strong>Service Workers</strong> and <strong>Cache Storage</strong> keep that data.',
+        warningText: 'Clearing <strong>localStorage</strong> removes login and saved tool data, including local Baby Tracker records, Trace Viewer traces and Sentence Manager data. Export important data from the relevant tool first. <strong>Service Workers</strong> and <strong>Cache Storage</strong> keep that data.',
         tipTitle: '\u{1F4A1} How to use?',
         tipDismiss: 'Dismiss instructions',
         tip1: '<strong>localStorage</strong> \u2014 panel settings, HACS, HA frontend. Clearing requires re-login.',
-        tip2: '<strong>sessionStorage</strong> \u2014 current session data. Safe to clear.',
-        tip3: '<strong>Service Workers</strong> \u2014 cache offline assets. Unregistering forces fresh file downloads.',
+        tip2: '<strong>sessionStorage</strong> \u2014 current session data. Clearing deletes session data.',
+        tip3: '<strong>Service Workers</strong> \u2014 cache offline assets. Unregistering removes registrations; reload to stop their active control.',
         tip4: '<strong>Cache Storage</strong> \u2014 browser cache API. Clearing frees up space.',
-        tip5: '<strong>Reload scripts</strong> \u2014 force re-download of all tool .js files from server.',
+        tip5: '<strong>Reload scripts</strong> \u2014 refetch detected HACS scripts without executing them or clearing HTTP cache.',
         tip6: '<strong>\u26A0\uFE0F Clear EVERYTHING</strong> \u2014 runs all above + hard reload. Use if tools fail to load.',
         btnPurgeLS: 'Clear localStorage',
         btnPurgeLSDesc: 'Logout + reset panel settings',
         btnPurgeSS: 'Clear sessionStorage',
-        btnPurgeSSDesc: 'Session data \u2014 safe, no logout',
+        btnPurgeSSDesc: 'Deletes session data \u2014 no logout',
         btnPurgeSW: 'Unregister Service Workers',
         btnPurgeSWDesc: 'Offline cache \u2014 no logout',
         btnPurgeCS: 'Delete Cache Storage',
         btnPurgeCSDesc: 'Frees space \u2014 no logout',
         btnReloadTools: 'Reload tool scripts',
-        btnReloadToolsDesc: 'Force fetch with cache: no-store',
+        btnReloadToolsDesc: 'Fetch fresh copies of detected HACS scripts',
         btnPurgeAll: 'Clear EVERYTHING',
         btnPurgeAllDesc: '\u26A0\uFE0F Also deletes saved tool data',
         btnPurgeCaches: 'Clear caches only',
         btnPurgeCachesDesc: 'Keep login and HA Tools data',
         btnHardReload: 'Hard Reload',
-        btnHardReloadDesc: 'Ctrl+Shift+R \u2014 full page reload',
+        btnHardReloadDesc: 'Page reload with a fresh URL',
         logHeader: 'Actions',
         logReady: 'Purge Cache ready. Choose an action.',
         lsKeysHeader: 'localStorage \u2014 keys',
@@ -641,11 +655,11 @@ class HAPurgeCache extends HTMLElement {
         statEntries: 'entries',
         statScripts: 'scripts',
         deleteKey: 'Delete this key',
-        confirmLS: 'Clear localStorage?\n\n\u26A0\uFE0F You will lose your login token, settings, local Baby Tracker records and saved Trace Viewer traces. Data without a copy in HA may be lost.\n\nChoose “Clear caches only” to keep them. Continue?',
-        confirmSS: 'Clear sessionStorage?\n\n\u{1F4CB} Data that will be lost:\n\u2022 Current session data (forms, temporary states)\n\u2022 No re-login required\n\nContinue?',
-        confirmSW: 'Unregister Service Workers?\n\n\u2699\uFE0F Effect:\n\u2022 Removes offline cache \u2014 assets will load from server\n\u2022 No re-login required\n\u2022 May slow down first load\n\nContinue?',
-        confirmCS: 'Delete Cache Storage?\n\n\u{1F4E6} Effect:\n\u2022 Removes browser cache API\n\u2022 No re-login required\n\u2022 Frees up space\n\nContinue?',
-        confirmAll: '\u{1F9F9} Clear EVERYTHING?\n\n\u26A0\uFE0F This permanently removes browser-local data, including Baby Tracker records, saved Trace Viewer traces, settings and your HA login token. Data stored only in this browser may be lost.\n\nChoose “Clear caches only” instead to keep that data.\n\nContinue with a full reset?',
+        confirmLS: 'Clear localStorage?\n\n\u26A0\uFE0F You will lose your login token, settings, local Baby Tracker records, saved Trace Viewer traces and Sentence Manager data. Data without a copy in HA may be lost.\n\nChoose “Clear caches only” to keep them. Continue?',
+        confirmSS: 'Clear sessionStorage?\n\n\u{1F4CB} Data that will be lost:\n\u2022 Current session data (forms, temporary states)\n\u2022 HA login normally remains; other session data is deleted\n\nContinue?',
+        confirmSW: 'Unregister Service Workers?\n\n\u2699\uFE0F Effect:\n\u2022 Removes worker registrations; reload the page to stop active control\n\u2022 Login and saved browser data remain\n\u2022 May slow down first load\n\nContinue?',
+        confirmCS: 'Delete Cache Storage?\n\n\u{1F4E6} Effect:\n\u2022 Removes entries stored in Cache Storage\n\u2022 Login and saved browser data remain\n\u2022 Frees up space\n\nContinue?',
+        confirmAll: '\u{1F9F9} Clear EVERYTHING?\n\n\u26A0\uFE0F This permanently removes browser-local data, including Baby Tracker records, saved Trace Viewer traces, Sentence Manager data, settings and your HA login token. Data stored only in this browser may be lost.\n\nChoose “Clear caches only” instead to keep that data.\n\nContinue with a full reset?',
         confirmHardReload: 'Perform Hard Reload?\n\nThe page will be fully reloaded.\nUnsaved data may be lost.\n\nContinue?',
         logLsCleared: (n) => `\u2705 localStorage cleared (${n} keys deleted)`,
         logLsFailed: (n) => `\u26A0\uFE0F localStorage not fully cleared (${n} keys remain)`,
@@ -655,14 +669,17 @@ class HAPurgeCache extends HTMLElement {
         logSwError: (msg) => `\u274C SW error: ${msg}`,
         logCsDeleted: (n) => `\u2705 ${n} Cache Storage(s) deleted`,
         logCsError: (msg) => `\u274C Cache error: ${msg}`,
-        logSwUnavailable: '\u2139\uFE0F Service Workers unavailable (HA on HTTP \u2014 requires HTTPS/localhost). Skipped.',
-        logCsUnavailable: '\u2139\uFE0F Cache Storage API unavailable (HA on HTTP \u2014 requires HTTPS/localhost). Skipped.',
-        statUnavailable: 'n/a (HTTP)',
+        logSwUnavailable: '\u2139\uFE0F Service Workers unavailable (requires browser support and HTTPS/localhost). Skipped.',
+        logCsUnavailable: '\u2139\uFE0F Cache Storage API unavailable (requires browser support and HTTPS/localhost). Skipped.',
+        statUnavailable: 'unavailable',
         statReadFailed: 'Read failed',
-        logNoPanel: '\u274C HA Tools Panel not found',
-        logToolsReloaded: (n, t) => `\u2705 Reloaded ${n}/${t} tool scripts (cache: no-store)`,
+        logNoPanel: 'No loaded HA Tools scripts found',
+        logToolsReloaded: (n, t) => `${n === t ? '\u2705' : '\u26A0'} Refetched ${n}/${t} tool scripts (cache: no-store)`,
+        logStorageError: (msg) => `Browser storage error: ${msg}`,
+        logPurgeIncomplete: 'Cleanup incomplete. Errors remain visible; retry the action or reload manually.',
+        confirmKey: (key) => `Delete key ${key}? Saved data or login may be lost. Cancel to keep it.`,
         logPurgeStart: '\u{1F9F9} Starting full purge...',
-        logPurgeDone: '\u{1F389} Done! Hard reload recommended (Ctrl+Shift+R)',
+        logPurgeDone: '\u{1F389} Done! Reloading the page.',
         logHardReload: '\u{1F504} Hard reload in 1s...',
       }
     };
@@ -719,6 +736,7 @@ class HAPurgeCache extends HTMLElement {
     const key = ["confirmLS", "confirmSS", "confirmSW", "confirmCS", "confirmAll", "confirmHardReload"]
       .find(key => message.textContent === previousText[key]);
     if (key) message.textContent = t[key];
+    if (this._confirmKeyName != null) message.textContent = t.confirmKey(this._confirmKeyName);
   }
 
   connectedCallback() {
@@ -759,7 +777,7 @@ class HAPurgeCache extends HTMLElement {
     }
 
     // Service Workers (requires secure context)
-    if (!('serviceWorker' in navigator)) {
+    if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistrations !== 'function') {
       stats.serviceWorkers = { count: 0, scopes: [], unavailable: true };
     } else {
       try {
@@ -932,116 +950,130 @@ class HAPurgeCache extends HTMLElement {
     container.querySelectorAll('.btn-danger[data-key]').forEach(btn => {
       btn.addEventListener('click', () => {
         const keyToDelete = btn.getAttribute('data-key');
-        localStorage.removeItem(keyToDelete);
-        this._addLog(`${this._t.deleteKey}: ${this._esc(keyToDelete)}`, 'success');
-        this._collectStats();
+        this._confirm(this._t.confirmKey(keyToDelete), async () => {
+          try {
+            localStorage.removeItem(keyToDelete);
+            if (localStorage.getItem(keyToDelete) !== null) throw new Error(this._t.statReadFailed);
+            this._addLog(`${this._t.deleteKey}: ${keyToDelete}`, 'success');
+          } catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
+          await this._collectStats();
+          this.shadowRoot.querySelector('#keys-toggle')?.focus();
+        }, keyToDelete);
       });
     });
   }
 
   async _purgeLocalStorage() {
-    const count = localStorage.length;
-    localStorage.clear();
-    if (localStorage.length > 0) {
-      this._addLog(this._t.logLsFailed(localStorage.length), 'error');
-    } else {
-      this._addLog(this._t.logLsCleared(count), 'success');
-    }
+    let ok = false;
+    try {
+      const count = localStorage.length;
+      localStorage.clear();
+      ok = localStorage.length === 0;
+      this._addLog(ok ? this._t.logLsCleared(count) : this._t.logLsFailed(localStorage.length), ok ? 'success' : 'error');
+    } catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
     await this._collectStats();
+    return ok;
   }
 
   async _purgeSessionStorage() {
-    const count = sessionStorage.length;
-    sessionStorage.clear();
-    if (sessionStorage.length > 0) {
-      this._addLog(this._t.logSsFailed, 'error');
-    } else {
-      this._addLog(this._t.logSsCleared(count), 'success');
-    }
+    let ok = false;
+    try {
+      const count = sessionStorage.length;
+      sessionStorage.clear();
+      ok = sessionStorage.length === 0;
+      this._addLog(ok ? this._t.logSsCleared(count) : this._t.logSsFailed, ok ? 'success' : 'error');
+    } catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
     await this._collectStats();
+    return ok;
   }
 
   async _purgeServiceWorkers() {
-    if (!('serviceWorker' in navigator)) {
+    if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistrations !== 'function') {
       this._addLog(this._t.logSwUnavailable, 'info');
       await this._collectStats();
-      return;
+      return true;
     }
+    let ok = true;
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
       let count = 0;
       for (const reg of regs) {
-        if (await reg.unregister()) count++;
+        try { if (await reg.unregister()) count++; }
+        catch (e) { ok = false; this._addLog(this._t.logSwError(e.message), 'error'); }
       }
       this._addLog(this._t.logSwUnregistered(count), 'success');
     } catch (e) {
+      ok = false;
       this._addLog(this._t.logSwError(e.message), 'error');
     }
     await this._collectStats();
+    return ok;
   }
 
   async _purgeCacheStorage() {
     if (typeof caches === 'undefined' || !caches || typeof caches.keys !== 'function') {
       this._addLog(this._t.logCsUnavailable, 'info');
       await this._collectStats();
-      return;
+      return true;
     }
+    let ok = true;
     try {
       const names = await caches.keys();
       let count = 0;
       for (const name of names) {
-        if (await caches.delete(name)) count++;
+        try { if (await caches.delete(name)) count++; }
+        catch (e) { ok = false; this._addLog(this._t.logCsError(e.message), 'error'); }
       }
       this._addLog(this._t.logCsDeleted(count), 'success');
     } catch (e) {
+      ok = false;
       this._addLog(this._t.logCsError(e.message), 'error');
     }
     await this._collectStats();
+    return ok;
   }
 
   async _forceReloadTools() {
     try {
-      const panel = document.querySelector('ha-tools-panel') || document.querySelector('home-assistant');
-      // After split: discover loaded /local/community/* scripts and force-refetch them.
-      const tags = Array.from(document.head.querySelectorAll('script[src*="/local/community/"]')).map(s => s.src.split('?')[0]);
-      if (!tags.length) {
-        this._addLog(this._t.logNoPanel, 'error');
-        return;
-      }
+      // HA imports HACS modules dynamically: they need not have a script tag.
+      const observed = [...Array.from(document.head.querySelectorAll('script[src]'), tag => tag.src),
+        ...(typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource').map(entry => entry.name) : [])];
+      const urls = [...new Set(observed.filter(value => {
+        const url = new URL(value, window.location.href);
+        return url.origin === window.location.origin && /^\/(?:local\/community|hacsfiles)\/.+\.js$/.test(url.pathname);
+      }))];
+      if (!urls.length) { this._addLog(this._t.logNoPanel, 'info'); return true; }
       let loaded = 0;
-
-      for (const tag of tags) {
-        const url = tag + '?_force=' + Date.now();
-        try {
-          const resp = await fetch(url, { cache: 'no-store' });
-          if (resp.ok) loaded++;
-        } catch (e) {
-          // ignore individual failures
-        }
+      for (const value of urls) {
+        const url = new URL(value, window.location.href);
+        url.searchParams.set('_force', Date.now());
+        try { if ((await fetch(url.toString(), { cache: 'no-store' })).ok) loaded++; }
+        catch (_) { /* Aggregate failures below without exposing response data. */ }
       }
-      this._addLog(this._t.logToolsReloaded(loaded, tags.length), 'success');
-    } catch (e) {
-      this._addLog(this._t.logCsError(e.message), 'error');
-    }
+      this._addLog(this._t.logToolsReloaded(loaded, urls.length), loaded === urls.length ? 'success' : 'error');
+      return loaded === urls.length;
+    } catch (e) { this._addLog(this._t.logCsError(e.message), 'error'); return false; }
   }
 
   async _purgeAll() {
     this._addLog(this._t.logPurgeStart, 'info');
-    await this._purgeLocalStorage();
-    await this._purgeSessionStorage();
-    await this._purgeServiceWorkers();
-    await this._purgeCacheStorage();
-    await this._forceReloadTools();
-    this._addLog(this._t.logPurgeDone, 'success');
-    // The README documents "Clear EVERYTHING" as also hard-reloading the page
-    // (listed as automatic). It never did — the reload was a separate button.
-    this._hardReload();
+    const results = [];
+    results.push(await this._purgeLocalStorage());
+    results.push(await this._purgeSessionStorage());
+    results.push(await this._purgeServiceWorkers());
+    results.push(await this._purgeCacheStorage());
+    results.push(await this._forceReloadTools());
+    if (results.every(Boolean)) {
+      this._addLog(this._t.logPurgeDone, 'success');
+      this._hardReload();
+    } else { this._addLog(this._t.logPurgeIncomplete, 'error'); }
   }
 
   async _purgeCachesOnly() {
-    await this._purgeServiceWorkers();
-    await this._purgeCacheStorage();
-    this._hardReload();
+    const workers = await this._purgeServiceWorkers();
+    const cache = await this._purgeCacheStorage();
+    if (workers && cache) this._hardReload();
+    else this._addLog(this._t.logPurgeIncomplete, 'error');
   }
 
   _hardReload() {
@@ -1376,9 +1408,9 @@ class HAPurgeCache extends HTMLElement {
 
         /* Confirm overlay */
         .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 999; display: none; align-items: center; justify-content: center; }
-        .confirm-dialog { background: var(--bento-card); padding: 24px; border-radius: var(--bento-radius-md); max-width: 420px; width: 90%; box-shadow: var(--bento-shadow-lg); }
+        .confirm-dialog { box-sizing: border-box; max-height: 90vh; overflow-y: auto; background: var(--bento-card); padding: 24px; border-radius: var(--bento-radius-md); max-width: 420px; width: 90%; box-shadow: var(--bento-shadow-lg); }
         .confirm-dialog h3 { margin: 0 0 12px; font-size: 16px; color: var(--bento-text); }
-        .confirm-dialog p { margin: 0 0 20px; font-size: 13px; color: var(--bento-text-secondary); line-height: 1.6; white-space: pre-wrap; }
+        .confirm-dialog p { overflow-wrap: anywhere; margin: 0 0 20px; font-size: 13px; color: var(--bento-text-secondary); line-height: 1.6; white-space: pre-wrap; }
         .confirm-dialog-btns { display: flex; gap: 8px; justify-content: flex-end; }
         .btn-cancel { padding: 8px 18px; border: 1px solid var(--bento-border); border-radius: var(--bento-radius-xs); background: var(--bento-bg); color: var(--bento-text); font-size: 13px; cursor: pointer; }
         .btn-confirm-ok { padding: 8px 18px; border: none; border-radius: var(--bento-radius-xs); background: var(--bento-error); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -1578,8 +1610,8 @@ class HAPurgeCache extends HTMLElement {
         </div>
 
         <div class="confirm-overlay" id="confirm-overlay">
-          <div class="confirm-dialog">
-            <h3>${this._lang === 'pl' ? 'Potwierdzenie' : 'Confirm'}</h3>
+          <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+            <h3 id="confirm-title">${this._lang === 'pl' ? 'Potwierdzenie' : 'Confirm'}</h3>
             <p id="confirm-msg"></p>
             <div class="confirm-dialog-btns">
               <button class="btn-cancel" id="confirm-cancel">${this._lang === 'pl' ? 'Anuluj' : 'Cancel'}</button>
@@ -1607,8 +1639,22 @@ class HAPurgeCache extends HTMLElement {
 
     // Confirm overlay wiring
     const overlay = this.shadowRoot.querySelector('#confirm-overlay');
-    this.shadowRoot.querySelector('#confirm-cancel').addEventListener('click', () => { overlay.style.display = 'none'; this._pendingConfirm = null; });
-    this.shadowRoot.querySelector('#confirm-ok').addEventListener('click', () => { overlay.style.display = 'none'; if (this._pendingConfirm) { this._pendingConfirm(); this._pendingConfirm = null; } });
+    this.shadowRoot.querySelector('#confirm-cancel').addEventListener('click', () => this._closeConfirm());
+    this.shadowRoot.querySelector('#confirm-ok').addEventListener('click', async () => {
+      const action = this._pendingConfirm;
+      this._closeConfirm();
+      try { if (action) await action(); }
+      catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
+    });
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this._closeConfirm(); }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const cancel = this.shadowRoot.querySelector('#confirm-cancel');
+        const ok = this.shadowRoot.querySelector('#confirm-ok');
+        (this.shadowRoot.activeElement === cancel ? ok : cancel).focus();
+      }
+    });
 
     // Bind events (with custom confirmation for destructive actions)
     this.shadowRoot.querySelector('#btn-purge-ls').addEventListener('click', () => this._confirm(this._t.confirmLS, () => this._purgeLocalStorage()));

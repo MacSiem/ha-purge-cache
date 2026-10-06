@@ -71,8 +71,8 @@ test('a failed worker removal is reported and cache-only still preserves storage
     await card._purgeCachesOnly();
     assert.match(logs[0].msg, /fixture-denied/);
     assert.equal(logs[0].type, 'error');
-    assert.deepEqual(calls, ['cache:one', 'reload']);
-    assert.equal(logs[1].msg, card._t.logCsDeleted(1));
+    assert.deepEqual(calls, ['cache:one']);
+    assert.ok(logs.some(row => row.msg === card._t.logCsDeleted(1)));
     verifyStorage();
   } finally { dom.window.close(); }
 });
