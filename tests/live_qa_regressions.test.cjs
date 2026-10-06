@@ -14,7 +14,8 @@ for(const language of ['en','pl']) for(const api of ['serviceWorker','caches']) 
  test(`denied API property access leaves measured failures and usable actions: ${api} (${language})`,async()=>{
   const {dom,w,card,root}=setup(language);
   try {
-   const target=api==='serviceWorker'?w.navigator:w;
+   // jsdom's Window proxy suppresses exceptions from own getters; its prototype preserves browser getter behavior.
+   const target=api==='serviceWorker'?w.navigator:Object.getPrototypeOf(w);
    Object.defineProperty(target,api,{configurable:true,get(){throw new w.DOMException('actual browser denial','SecurityError');}});
    await assert.doesNotReject(card._collectStats());
    assert.match(root.querySelector(api==='serviceWorker'?'#stat-sw':'#stat-cs').textContent,language==='pl'?/Błąd odczytu/:/Read failed/);
