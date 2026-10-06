@@ -776,36 +776,32 @@ class HAPurgeCache extends HTMLElement {
       stats.sessionStorage = { count: null, sizeKB: null, error: e.message };
     }
 
-    // Service Workers (requires secure context)
-    if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistrations !== 'function') {
-      stats.serviceWorkers = { count: 0, scopes: [], unavailable: true };
-    } else {
-      try {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        stats.serviceWorkers = { count: regs.length, scopes: regs.map(r => r.scope) };
-      } catch (e) {
-        stats.serviceWorkers = { count: null, scopes: [], error: e.message };
-      }
-    }
-
-    // Cache Storage API (requires secure context)
-    if (typeof caches === 'undefined' || !caches || typeof caches.keys !== 'function') {
-      stats.cacheStorage = { count: 0, caches: [], unavailable: true };
-    } else {
+    // API getters themselves can throw in sandboxed or policy-restricted contexts.
     try {
-      const names = await caches.keys();
-      let totalSize = 0;
-      const cacheDetails = [];
-      for (const name of names) {
-        const cache = await caches.open(name);
-        const keys = await cache.keys();
-        cacheDetails.push({ name, entries: keys.length });
+      const workers = navigator.serviceWorker;
+      if (!workers || typeof workers.getRegistrations !== 'function') {
+        stats.serviceWorkers = { count: null, scopes: [], unavailable: true };
+      } else {
+        const regs = await workers.getRegistrations();
+        stats.serviceWorkers = { count: regs.length, scopes: regs.map(r => r.scope) };
       }
-      stats.cacheStorage = { count: names.length, caches: cacheDetails };
-    } catch (e) {
-      stats.cacheStorage = { count: null, caches: [], error: e.message };
-    }
-    }
+    } catch (e) { stats.serviceWorkers = { count: null, scopes: [], error: e.message }; }
+
+    try {
+      const cacheApi = window.caches;
+      if (!cacheApi || typeof cacheApi.keys !== 'function') {
+        stats.cacheStorage = { count: null, caches: [], unavailable: true };
+      } else {
+        const names = await cacheApi.keys();
+        const cacheDetails = [];
+        for (const name of names) {
+          const cache = await cacheApi.open(name);
+          const keys = await cache.keys();
+          cacheDetails.push({ name, entries: keys.length });
+        }
+        stats.cacheStorage = { count: names.length, caches: cacheDetails };
+      }
+    } catch (e) { stats.cacheStorage = { count: null, caches: [], error: e.message }; }
 
     // HA Tools scripts info (count only the public card-picker registry).
     try {
@@ -988,47 +984,41 @@ class HAPurgeCache extends HTMLElement {
   }
 
   async _purgeServiceWorkers() {
-    if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistrations !== 'function') {
-      this._addLog(this._t.logSwUnavailable, 'info');
-      await this._collectStats();
-      return true;
-    }
     let ok = true;
     try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      let count = 0;
-      for (const reg of regs) {
-        try { if (await reg.unregister()) count++; }
-        catch (e) { ok = false; this._addLog(this._t.logSwError(e.message), 'error'); }
+      const workers = navigator.serviceWorker;
+      if (!workers || typeof workers.getRegistrations !== 'function') {
+        this._addLog(this._t.logSwUnavailable, 'info');
+      } else {
+        const regs = await workers.getRegistrations();
+        let count = 0;
+        for (const reg of regs) {
+          try { if (await reg.unregister()) count++; }
+          catch (e) { ok = false; this._addLog(this._t.logSwError(e.message), 'error'); }
+        }
+        this._addLog(this._t.logSwUnregistered(count), 'success');
       }
-      this._addLog(this._t.logSwUnregistered(count), 'success');
-    } catch (e) {
-      ok = false;
-      this._addLog(this._t.logSwError(e.message), 'error');
-    }
+    } catch (e) { ok = false; this._addLog(this._t.logSwError(e.message), 'error'); }
     await this._collectStats();
     return ok;
   }
 
   async _purgeCacheStorage() {
-    if (typeof caches === 'undefined' || !caches || typeof caches.keys !== 'function') {
-      this._addLog(this._t.logCsUnavailable, 'info');
-      await this._collectStats();
-      return true;
-    }
     let ok = true;
     try {
-      const names = await caches.keys();
-      let count = 0;
-      for (const name of names) {
-        try { if (await caches.delete(name)) count++; }
-        catch (e) { ok = false; this._addLog(this._t.logCsError(e.message), 'error'); }
+      const cacheApi = window.caches;
+      if (!cacheApi || typeof cacheApi.keys !== 'function') {
+        this._addLog(this._t.logCsUnavailable, 'info');
+      } else {
+        const names = await cacheApi.keys();
+        let count = 0;
+        for (const name of names) {
+          try { if (await cacheApi.delete(name)) count++; }
+          catch (e) { ok = false; this._addLog(this._t.logCsError(e.message), 'error'); }
+        }
+        this._addLog(this._t.logCsDeleted(count), 'success');
       }
-      this._addLog(this._t.logCsDeleted(count), 'success');
-    } catch (e) {
-      ok = false;
-      this._addLog(this._t.logCsError(e.message), 'error');
-    }
+    } catch (e) { ok = false; this._addLog(this._t.logCsError(e.message), 'error'); }
     await this._collectStats();
     return ok;
   }
@@ -1320,7 +1310,8 @@ class HAPurgeCache extends HTMLElement {
           border-radius: var(--bento-radius-sm);
           overflow: hidden;
         }
-        .keys-header {
+        .card-title { min-width: 0; overflow-wrap: anywhere; }
+        .keys-header { width: 100%; border: 0; text-align: left; font-family: inherit;
           padding: 10px 14px;
           font-size: 12px;
           font-weight: 600;
@@ -1487,7 +1478,7 @@ class HAPurgeCache extends HTMLElement {
 </style>
 
       <div class="card">
-        <h2>\u{1F9F9} Purge Cache <span class="ha-ver">HA <span id="ha-version">...</span></span></h2>
+        <h2>\u{1F9F9} <span class="card-title" ${this._config?.title ? '' : 'data-locale-text="title"'}>${this._esc(this._config?.title || t.title)}</span> <span class="ha-ver">HA <span id="ha-version">...</span></span></h2>
         <div class="subtitle" data-locale-text="subtitle">${t.subtitle}</div>
         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:12px 14px;margin:8px 0;font-size:12px;line-height:1.6;color:var(--bento-text,#1e293b)">
           <strong data-locale-text="warningTitle">${t.warningTitle}</strong> <span data-locale-rich="warningText">${t.warningText}</span>
@@ -1532,10 +1523,10 @@ class HAPurgeCache extends HTMLElement {
             </div>
 
             <div class="keys-section">
-              <div class="keys-header" id="keys-toggle">
+              <button type="button" aria-expanded="true" aria-controls="ls-keys" class="keys-header" id="keys-toggle">
                 <span data-locale-text="lsKeysHeader">${t.lsKeysHeader}</span>
                 <span class="chevron">\u25BE</span>
-              </div>
+              </button>
               <div id="ls-keys"></div>
             </div>
           </div>
@@ -1672,6 +1663,7 @@ class HAPurgeCache extends HTMLElement {
     toggle.addEventListener('click', () => {
       toggle.classList.toggle('collapsed');
       keysDiv.classList.toggle('hidden');
+      toggle.setAttribute('aria-expanded', String(!keysDiv.classList.contains('hidden')));
     });
   }
 
