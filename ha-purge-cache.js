@@ -1092,6 +1092,7 @@ class HAPurgeCache extends HTMLElement {
   _render() {
     if (!this._hass) return;
     const t = this._t;
+    const previousLog = this.shadowRoot.querySelector("#action-log")?.innerHTML;
     this._rendered = true;
     this.shadowRoot.innerHTML = `
       <style>${HA_PURGE_CACHE_BENTO_CSS}
@@ -1665,6 +1666,8 @@ class HAPurgeCache extends HTMLElement {
       keysDiv.classList.toggle('hidden');
       toggle.setAttribute('aria-expanded', String(!keysDiv.classList.contains('hidden')));
     });
+    if (previousLog != null) this.shadowRoot.querySelector('#action-log').innerHTML = previousLog;
+    this._updateDisplay();
   }
 
   disconnectedCallback() {
