@@ -4,7 +4,7 @@
 
 Fix "my dashboard won't update" in one click: inspect and clear browser
 localStorage, sessionStorage, Service Workers and Cache Storage, and
-force-reload HA Tools scripts — from a Lovelace card.
+refetch detected HA Tools scripts — from a Lovelace card.
 
 [![Version](https://img.shields.io/github/v/release/MacSiem/ha-purge-cache)](https://github.com/MacSiem/ha-purge-cache/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -32,11 +32,13 @@ force-reload HA Tools scripts — from a Lovelace card.
 | Size per localStorage key | Confirming each destructive action |
 | Reload after "Clear caches only" or "Clear EVERYTHING" | — |
 
+If an action fails, the report stays visible and the card does not automatically reload. Retry after resolving the browser restriction, or reload manually. Unavailable APIs and denied reads are reported separately from measured empty storage.
+
 ## Screenshots
 
 | Light | Dark |
 |---|---|
-| ![Main view, light theme](docs/screenshots/card-main-light.png) | ![Main view, dark theme](docs/screenshots/card-main-dark.png) |
+| ![Main view, light theme](docs/screenshots/card-main-light.jpg) | ![Main view, dark theme](docs/screenshots/card-main-dark.jpg) |
 
 *Synthetic browser storage stats, the localStorage key browser, separate
 cache-only action and explicit warning before deleting saved tool data. Dark
@@ -55,7 +57,15 @@ mode follows your Home Assistant theme.*
 type: custom:ha-purge-cache
 ```
 
-That's it — no options are required.
+No options are required. Optional configuration:
+
+```yaml
+type: custom:ha-purge-cache
+title: Browser maintenance
+show_support: false
+```
+
+`title` is shown literally and wraps within the card. `show_support: false` hides the optional administrator-only support link. You can also dismiss the instructions and support link in the card; dismissal persists when browser storage is available.
 
 ## FAQ
 
@@ -67,7 +77,7 @@ browser devtools.
 **Will I get logged out?**
 Only if you clear **localStorage** (your HA login token lives there) or use
 **Clear EVERYTHING**. Both can also erase local Baby Tracker records, saved
-Trace Viewer traces and other browser-only data. Use **Clear caches only** to
+Trace Viewer traces, Sentence Manager data and other browser-only data. Use **Clear caches only** to
 retain these. Browser Cache Storage is separate from the normal HTTP cache;
 if a HACS JavaScript update still appears stale, update its Lovelace resource
 URL or reload the frontend after HACS changes it.
@@ -77,7 +87,7 @@ No. All actions are strictly browser-side; your configuration, automations
 and history are untouched.
 
 **Does this send data anywhere?**
-No. Everything runs locally in your browser — no telemetry, no CDN assets.
+Storage keys and values are not uploaded. The card has no telemetry or CDN assets. Reload tool scripts only refetches detected JavaScript from your own HA origin with `cache: no-store`; it does not execute those copies or clear the normal HTTP cache.
 
 ## Changelog
 

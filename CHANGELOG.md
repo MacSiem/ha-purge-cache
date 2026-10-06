@@ -1,18 +1,14 @@
-## Unreleased
+# Changelog — Purge Cache
 
-- Refresh Polish and English labels in place when Home Assistant changes language, preserving focus, cached statistics, expanded sections, logs, dismissed guidance and pending confirmations without reading storage or clearing data.
-- Give the instruction dismissal button a descriptive accessible name in Polish and English; dismissal still works when browser storage denies persistence.
-- Count only confirmed service-worker unregister and cache-delete results; cache-only refresh preserves localStorage and sessionStorage.
+## 4.1.15 (2026-10-06)
 
-## Unreleased
-
-- Show a localized read failure instead of zero when browser storage, Service Workers or Cache Storage denies access. Keep measured empty storage at zero and unavailable HTTP APIs separate.
-- Preserve card and key-list rendering when localStorage becomes inaccessible; clearing behavior is unchanged.
-
-## 4.1.15 (2026-09-29)
-
-- Add "Clear caches only" to remove Service Workers and Cache Storage without deleting login or saved HA Tools data.
-- Warn explicitly that localStorage and full reset remove Baby Tracker records and saved Trace Viewer traces.
+- Add Clear caches only: unregister Service Workers and delete Cache Storage while preserving login and all localStorage/sessionStorage data.
+- Require confirmation for every data-deleting action, including a single key. Warn about Baby Tracker, Trace Viewer and Sentence Manager data; default focus to Cancel and support Tab/Escape with focus restoration.
+- Count confirmed removals and preserve a readable report when an action fails. Catch denied API getters, distinguish unavailable APIs from read failures, and allow retry without an automatic reload hiding errors.
+- Refetch detected dynamic HACS scripts with their existing version query and cache: no-store. Do not execute refetched code or claim to clear the HTTP cache.
+- Refresh Polish and English labels in place, preserving focus, expanded sections, pending confirmation and literal history. Make key disclosure keyboard accessible.
+- Render configured titles safely and wrap long text. Preserve collected statistics and action history when the card renders after initialization or a configuration change.
+- Keep the natural height in Home Assistant Sections. Verify light/dark, narrow/wide and native Chrome 200% layouts; refresh synthetic screenshots.
 
 ## 4.1.14 (2026-09-01)
 
@@ -37,7 +33,6 @@
 
 - Fix (UI): the small accent dot before section titles no longer detaches from the title text (it was pushed to the opposite edge by the header's flex space-between); it is now pinned next to the title.
 
-# Changelog — Purge Cache
 
 ## [4.1.8] - 2026-06-15
 
