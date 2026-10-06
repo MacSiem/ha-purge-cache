@@ -78,3 +78,24 @@ test('per-key deletion asks for confirmation and reports denial without removing
   assert.match(root.querySelector('.log-error').textContent,/error/i);
  }finally{dom.window.close();}
 });
+test('missing API members are unavailable rather than false deletion failures',async()=>{
+ const {dom,w,card,root}=setup();try{
+  Object.defineProperty(w.navigator,'serviceWorker',{value:undefined,configurable:true});
+  Object.defineProperty(w,'caches',{value:undefined,configurable:true});
+  await card._purgeCachesOnly();
+  assert.match(root.querySelector('#action-log').textContent,/unavailable/i);
+  assert.equal(root.querySelectorAll('.log-error').length,0);
+ }finally{dom.window.close();}
+});
+test('loaded HACS modules are refetched without executing or claiming to reset HTTP cache',async()=>{
+ const {dom,w,card,root}=setup();try{
+  Object.defineProperty(w.performance,'getEntriesByType',{value:()=>[{name:'http://localhost/hacsfiles/ha-purge-cache/ha-purge-cache.js?v=4.1.15'},{name:'http://localhost/private.js'}]});
+  w.fetch=async(url,options)=>{
+   assert.match(url,/\/hacsfiles\/ha-purge-cache\/ha-purge-cache\.js\?v=4\.1\.15&_force=/);
+   assert.equal(options.cache,'no-store');return {ok:true};
+  };
+  await card._forceReloadTools();
+  assert.match(root.querySelector('.log-success').textContent,/1\/1/);
+  assert.equal(root.querySelectorAll('.log-error').length,0);
+ }finally{dom.window.close();}
+});
