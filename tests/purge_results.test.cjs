@@ -269,3 +269,30 @@ test('household keeps local browser purge and its selected-store result',async()
   f.w.sessionStorage.setItem('household-owned','fixture');await f.card._purgeSessionStorage();assert.equal(f.w.sessionStorage.getItem('household-owned'),null);assert.equal(selected(f.card,'sessionStorage').removed,1);assert.equal(f.root.querySelector('#btn-purge-ss').disabled,false);
  }finally{f.dom.window.close();}
 });
+
+// Owner preservation and transport regressions, before corresponding fixes.
+test('offline household can still explicitly purge its local browser storage',async()=>{
+ const f=await setup();try{f.card.hass={...f.card._hass,user:{id:'fixture-household',is_admin:false,is_active:true},connection:{connected:false}};f.w.sessionStorage.setItem('offline-owned','fixture');await f.card._purgeSessionStorage();assert.equal(f.w.sessionStorage.getItem('offline-owned'),null);assert.equal(selected(f.card,'sessionStorage').removed,1);
+ }finally{f.dom.window.close();}
+});
+test('current overview retains actual cache-entry counts; selected purge does not open caches',async()=>{
+ const f=await setup();try{let opens=0;const names=new Set(['fixture']);f.w.caches={keys:async()=>[...names],open:async()=>{opens++;return {keys:async()=>['a','b','c']};},delete:async n=>names.delete(n)};
+ await f.card._collectStats();assert.equal(f.card._stats.cacheStorage.caches[0].entries,3);assert.match(f.root.querySelector('#stat-cs').textContent,/3/);const baseline=opens;await f.card._purgeCacheStorage();assert.equal(opens,baseline);assert.equal(selected(f.card,'cacheStorage').removed,1);
+ }finally{f.dom.window.close();}
+});
+test('typed disconnect with cached true invalidates a pending browser mutation without late publication',async()=>{
+ const f=await setup();let release;try{const connection=new f.w.EventTarget();connection.connected=true;f.card.hass={...f.card._hass,connection};f.w.caches={keys:async()=>['fixture'],delete:()=>new Promise(r=>release=r)};
+ const pending=f.card._purgeCacheStorage();await tick();connection.dispatchEvent(new f.w.Event('disconnected'));release(true);await pending;assert.equal(f.card._actionResult,null);
+ }finally{release?.(true);f.dom.window.close();}
+});
+test('group_ids change clears a completed result immediately',async()=>{
+ const f=await setup();try{f.card.hass={...f.card._hass,user:{...admin(),group_ids:['one']}};await f.card._purgeSessionStorage();assert.ok(f.card._actionResult);f.card.hass={...f.card._hass,user:{...admin(),group_ids:['two']}};assert.equal(f.card._actionResult,null);
+ }finally{f.dom.window.close();}
+});
+test('deadline keeps an unsettled deletion occupied and never issues another mutation',async()=>{
+ const f=await setup();const releases=[];try{let deletes=0;const live=new Set(['one']);f.w.caches={keys:async()=>[...live],delete:()=>{deletes++;return new Promise(resolve=>releases.push(()=>{live.clear();resolve(true);}));}};
+ const timer=f.w.setTimeout.bind(f.w);f.w.setTimeout=(fn,ms,...args)=>timer(fn,ms===5000?2:ms,...args);
+ const first=f.card._purgeCacheStorage();await new Promise(r=>setTimeout(r,15));const second=f.card._purgeCacheStorage();await tick();assert.equal(deletes,1);assert.equal(f.root.querySelector('#btn-purge-cs').disabled,true);
+ for(const release of releases)release();await Promise.all([first,second]);await tick();assert.notEqual(f.card._actionResult.status,'success');assert.equal(deletes,1);
+ }finally{for(const release of releases)release();f.dom.window.close();}
+});
