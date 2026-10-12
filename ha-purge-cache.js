@@ -910,7 +910,7 @@ class HAPurgeCache extends HTMLElement {
           let entries = null;
           // Preserve the existing count capability. The optional setting can
           // disable opening caches; selected purge readback never opens them.
-          if (this._config.inspect_cache_entries !== false && typeof cacheApi.open === 'function') {
+          if (this._config?.inspect_cache_entries !== false && typeof cacheApi.open === 'function') {
             const cache = await this._bounded(cacheApi.open(name), true);
             if (!this._current(token)) return;
             const keys = await this._bounded(cache.keys());
