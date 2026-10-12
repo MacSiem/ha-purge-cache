@@ -2,6 +2,46 @@
 (function() {
 'use strict';
 
+// HA Tools v3: vendored inside each consumer's own closure, never a window API.
+function createUiV3({ language = 'en' } = {}) {
+  const pl = String(language).startsWith('pl');
+  const states = {
+    success: ['Success', 'Sukces', '✓'],
+    partial: ['Partial', 'Częściowo', '½'],
+    unconfirmed: ['Unconfirmed', 'Niepotwierdzony', '?'],
+    error: ['Error', 'Błąd', '✕'],
+    not_checked: ['Not checked', 'Nie sprawdzono', '–'],
+    no_data: ['No data', 'Brak danych', '∅'],
+  };
+  const status = (value) => {
+    const code = typeof value === 'string' && Object.hasOwn(states, value) ? value : 'not_checked';
+    const row = states[code];
+    return { code, label: row[pl ? 1 : 0], icon: row[2], countsAsSuccess: code === 'success' };
+  };
+  const statusHtml = (value) => {
+    const result = status(value);
+    return `<span class="ht-result-state ht-result-state--${result.code}" data-result-state="${result.code}"><span aria-hidden="true">${result.icon}</span> ${result.label}</span>`;
+  };
+  const css = `
+.ht-result-state { display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid currentColor;border-radius:6px;font-size:12px;line-height:1.4;white-space:normal; }
+.ht-result-state--success { color:#237b3d;background:rgba(35,123,61,.10); }
+.ht-result-state--partial { color:#966400;background:rgba(150,100,0,.10); }
+.ht-result-state--unconfirmed { color:#ad5200;background:rgba(173,82,0,.10); }
+.ht-result-state--error { color:#c32b2b;background:rgba(195,43,43,.10); }
+.ht-result-state--not_checked,.ht-result-state--no_data { color:var(--secondary-text-color,#666);background:transparent; }
+.ht-result-state--no_data { border-style:dashed; }
+:host(.bento-dark) .ht-result-state--success { color:#81cf99; }
+:host(.bento-dark) .ht-result-state--partial { color:#efd080; }
+:host(.bento-dark) .ht-result-state--unconfirmed { color:#ffb97b; }
+:host(.bento-dark) .ht-result-state--error { color:#ff9999; }
+`;
+  return { status, statusHtml, css };
+}
+
+const _PURGE_LIMIT = 512;
+const _PURGE_NAME_LIMIT = 2048;
+const _PURGE_EXCLUSIONS = new Set(['ha-purge-cache-support-dismissed', 'purge-cache-tips-v1.0.0']);
+
 /**
  * Standalone Purge Cache card
  * Tool for clearing browser cache, localStorage, service workers,
@@ -518,7 +558,14 @@ class HAPurgeCache extends HTMLElement {
   getGridOptions() { return { columns: 12, min_columns: 6 }; }
 
   static getStubConfig() { return { type: 'custom:ha-purge-cache', title: 'Purge Cache' }; }
-  setConfig(config) { this._config = config || {}; if (this._rendered && this._hass) this._render(); }
+  setConfig(config) {
+    let signature;
+    try { signature = JSON.stringify(config || {}); } catch (_) { signature = null; }
+    if (signature === null || signature !== this._configSignature) this._invalidate();
+    this._configSignature = signature;
+    this._config = { ...(config || {}) };
+    if (this._rendered && this._hass) this._render();
+  }
   constructor() {
     super();
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
@@ -528,12 +575,21 @@ class HAPurgeCache extends HTMLElement {
     this._showConfirm = false;
     this._confirmAction = null;
     this._reloadTimer = null;
+    this._epoch = 0;
+    this._actionResult = null;
+    this._operationPromise = null;
+    this._statsPromise = null;
+    this._configSignature = undefined;
+    this._authority = undefined;
+    this._connection = undefined;
   }
 
   _confirm(message, onConfirm, keyName = null) {
+    if (!this.isConnected || !this._authorized() || this._operationPromise || this._reloadTimer) return;
+    this._confirmToken = this._token();
     const overlay = this.shadowRoot?.querySelector('#confirm-overlay');
     const msgEl = this.shadowRoot?.querySelector('#confirm-msg');
-    if (!overlay || !msgEl) { if (confirm(message)) onConfirm(); return; }
+    if (!overlay || !msgEl) return;
     msgEl.textContent = message;
     overlay.style.display = 'flex';
     this._pendingConfirm = onConfirm;
@@ -542,12 +598,17 @@ class HAPurgeCache extends HTMLElement {
     this.shadowRoot.querySelector('#confirm-cancel').focus();
   }
 
-  _closeConfirm() {
-    this.shadowRoot.querySelector('#confirm-overlay').style.display = 'none';
+  _closeConfirm(restoreFocus = true) {
+    const overlay = this.shadowRoot?.querySelector('#confirm-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const origin = this._confirmOrigin;
     this._pendingConfirm = null;
+    this._confirmToken = null;
     this._confirmKeyName = null;
-    this._confirmOrigin?.focus();
     this._confirmOrigin = null;
+    const message = this.shadowRoot?.querySelector('#confirm-msg');
+    if (message) message.textContent = '';
+    if (restoreFocus && origin?.isConnected && !origin.disabled) origin.focus();
   }
 
   get _t() {
@@ -564,7 +625,7 @@ class HAPurgeCache extends HTMLElement {
         tip3: '<strong>Service Workers</strong> \u2014 cache\'uj\u0105 zasoby offline. Wyrejestrowanie usuwa rejestracje; przeładuj stronę, aby zakończyć ich działanie.',
         tip4: '<strong>Cache Storage</strong> \u2014 API cache przegl\u0105darki. Usuni\u0119cie zwalnia miejsce.',
         tip5: '<strong>Prze\u0142aduj skrypty</strong> \u2014 pobiera ponownie wykryte skrypty HACS. Nie uruchamia ich i nie czyści cache HTTP.',
-        tip6: '<strong>\u26A0\uFE0F Wyczy\u015B\u0107 WSZYSTKO</strong> \u2014 uruchamia wszystkie powy\u017Csze + hard reload. U\u017Cyj je\u015Bli narz\u0119dzia nie \u0142aduj\u0105 si\u0119 prawid\u0142owo.',
+        tip6: '<strong>\u26A0\uFE0F Wyczy\u015B\u0107 WSZYSTKO</strong> \u2014 uruchamia wszystkie powy\u017Csze; przejrzyj wynik, potem potwierd\u017A hard reload. U\u017Cyj je\u015Bli narz\u0119dzia nie \u0142aduj\u0105 si\u0119 prawid\u0142owo.',
         btnPurgeLS: 'Wyczy\u015B\u0107 localStorage',
         btnPurgeLSDesc: 'Wylogowanie + reset ustawie\u0144 panelu',
         btnPurgeSS: 'Wyczy\u015B\u0107 sessionStorage',
@@ -629,7 +690,7 @@ class HAPurgeCache extends HTMLElement {
         tip3: '<strong>Service Workers</strong> \u2014 cache offline assets. Unregistering removes registrations; reload to stop their active control.',
         tip4: '<strong>Cache Storage</strong> \u2014 browser cache API. Clearing frees up space.',
         tip5: '<strong>Reload scripts</strong> \u2014 refetch detected HACS scripts without executing them or clearing HTTP cache.',
-        tip6: '<strong>\u26A0\uFE0F Clear EVERYTHING</strong> \u2014 runs all above + hard reload. Use if tools fail to load.',
+        tip6: '<strong>\u26A0\uFE0F Clear EVERYTHING</strong> \u2014 runs all above; review the result, then confirm hard reload. Use if tools fail to load.',
         btnPurgeLS: 'Clear localStorage',
         btnPurgeLSDesc: 'Logout + reset panel settings',
         btnPurgeSS: 'Clear sessionStorage',
@@ -687,6 +748,11 @@ class HAPurgeCache extends HTMLElement {
   }
 
   set hass(val) {
+    const signature = this._authoritySignature(val);
+    const authorityChanged = signature === null || signature !== this._authority || val?.connection !== this._connection;
+    if (authorityChanged) this._invalidate();
+    this._authority = signature;
+    this._connection = val?.connection;
     try {
       var _bg = (getComputedStyle(this).getPropertyValue('--card-background-color') || getComputedStyle(this).getPropertyValue('--primary-background-color') || '').trim();
       var _d = false;
@@ -702,8 +768,10 @@ class HAPurgeCache extends HTMLElement {
     const previousText = this._t;
     if (val?.language) this._lang = val.language.startsWith('pl') ? 'pl' : 'en';
     this._hass = val;
-    if (!this._rendered) this._render();
+    if (!this._rendered || authorityChanged && this._authorized()) this._render();
     else if (previousLanguage !== this._lang) this._refreshLocaleLabels(previousText);
+    if (!this._authorized()) { this._invalidate(); this.shadowRoot.querySelector('.donate-section')?.remove(); }
+    this._refreshActionControls();
   }
 
   _refreshLocaleLabels(previousText) {
@@ -737,14 +805,38 @@ class HAPurgeCache extends HTMLElement {
       .find(key => message.textContent === previousText[key]);
     if (key) message.textContent = t[key];
     if (this._confirmKeyName != null) message.textContent = t.confirmKey(this._confirmKeyName);
+    this._renderResult();
   }
 
   connectedCallback() {
+    this._invalidate();
     if (!this._rendered) this._render();
+    this._refreshActionControls();
     this._collectStats();
   }
 
-  async _collectStats() {
+  _collectStats() {
+    if (!this.isConnected || !this._authorized() || this._operationPromise) return Promise.resolve();
+    if (this._statsPromise) {
+      if (this._statsQueued) return this._statsQueued;
+      const queuedToken = this._token();
+      const queued = this._statsPromise.then(() => {
+        this._statsQueued = null;
+        return this._current(queuedToken) ? this._collectStats() : undefined;
+      });
+      this._statsQueued = queued;
+      return queued;
+    }
+    const token = this._token();
+    const pending = this._readOverview(token).finally(() => {
+      if (this._statsPromise === pending) this._statsPromise = null;
+    });
+    this._statsPromise = pending;
+    return pending;
+  }
+
+  async _readOverview(token) {
+    if (!this._current(token)) return;
     this._loading = true;
     this._showLoadingState();
     const stats = {};
@@ -754,26 +846,28 @@ class HAPurgeCache extends HTMLElement {
     try {
       let lsSize = 0;
       let lsCount = localStorage.length;
-      for (let i = 0; i < localStorage.length; i++) {
+      if (lsCount > _PURGE_LIMIT) throw new Error('bounded');
+      for (let i = 0; i < lsCount; i++) {
         const key = localStorage.key(i);
         lsSize += (key.length + (localStorage.getItem(key) || '').length) * 2;
       }
       stats.localStorage = { count: lsCount, sizeKB: (lsSize / 1024).toFixed(1) };
     } catch (e) {
-      stats.localStorage = { count: null, sizeKB: null, error: e.message };
+      stats.localStorage = { count: null, sizeKB: null, error: 'read_failed' };
     }
 
     // sessionStorage
     try {
       let ssSize = 0;
       let ssCount = sessionStorage.length;
-      for (let i = 0; i < sessionStorage.length; i++) {
+      if (ssCount > _PURGE_LIMIT) throw new Error('bounded');
+      for (let i = 0; i < ssCount; i++) {
         const key = sessionStorage.key(i);
         ssSize += (key.length + (sessionStorage.getItem(key) || '').length) * 2;
       }
       stats.sessionStorage = { count: ssCount, sizeKB: (ssSize / 1024).toFixed(1) };
     } catch (e) {
-      stats.sessionStorage = { count: null, sizeKB: null, error: e.message };
+      stats.sessionStorage = { count: null, sizeKB: null, error: 'read_failed' };
     }
 
     // API getters themselves can throw in sandboxed or policy-restricted contexts.
@@ -782,27 +876,29 @@ class HAPurgeCache extends HTMLElement {
       if (!workers || typeof workers.getRegistrations !== 'function') {
         stats.serviceWorkers = { count: null, scopes: [], unavailable: true };
       } else {
-        const regs = await workers.getRegistrations();
-        stats.serviceWorkers = { count: regs.length, scopes: regs.map(r => r.scope) };
+        const regs = await this._bounded(workers.getRegistrations());
+        if (!this._current(token)) return;
+        if (regs.length > _PURGE_LIMIT) throw new Error('bounded');
+        stats.serviceWorkers = { count: regs.length, scopes: [] };
       }
-    } catch (e) { stats.serviceWorkers = { count: null, scopes: [], error: e.message }; }
+    } catch (e) { stats.serviceWorkers = { count: null, scopes: [], error: 'read_failed' }; }
 
+    if (!this._current(token)) return;
     try {
       const cacheApi = window.caches;
       if (!cacheApi || typeof cacheApi.keys !== 'function') {
         stats.cacheStorage = { count: null, caches: [], unavailable: true };
       } else {
-        const names = await cacheApi.keys();
+        const names = await this._bounded(cacheApi.keys());
+        if (!this._current(token)) return;
+        if (names.length > _PURGE_LIMIT) throw new Error('bounded');
         const cacheDetails = [];
-        for (const name of names) {
-          const cache = await cacheApi.open(name);
-          const keys = await cache.keys();
-          cacheDetails.push({ name, entries: keys.length });
-        }
+        for (const name of names) cacheDetails.push({ name, entries: null });
         stats.cacheStorage = { count: names.length, caches: cacheDetails };
       }
-    } catch (e) { stats.cacheStorage = { count: null, caches: [], error: e.message }; }
+    } catch (e) { stats.cacheStorage = { count: null, caches: [], error: 'read_failed' }; }
 
+    if (!this._current(token)) return;
     // HA Tools scripts info (count only the public card-picker registry).
     try {
       if (window.customCards && Array.isArray(window.customCards)) {
@@ -827,10 +923,12 @@ class HAPurgeCache extends HTMLElement {
       stats.haVersion = 'unknown';
     }
 
-    this._stats = stats;
+    if (this._current(token)) this._stats = stats;
     } finally {
-      this._loading = false;
-      this._updateDisplay();
+      if (this._current(token)) {
+        this._loading = false;
+        this._updateDisplay();
+      }
     }
   }
 
@@ -861,6 +959,7 @@ class HAPurgeCache extends HTMLElement {
 
     const t = this._t;
     const s = this._stats;
+    if (!this._authorized()) return;
 
     // Update stat cards
     const lsEl = root.querySelector('#stat-ls');
@@ -895,7 +994,7 @@ class HAPurgeCache extends HTMLElement {
       } else if (s.cacheStorage.unavailable) {
         csEl.innerHTML = `<span class="stat-num stat-unavail">\u2014</span> <span class="stat-sub"><span data-locale-text="statUnavailable">${t.statUnavailable}</span></span>`;
       } else {
-      const total = s.cacheStorage.caches.reduce((sum, c) => sum + c.entries, 0);
+      const total = s.cacheStorage.caches.every(c => Number.isInteger(c.entries)) ? s.cacheStorage.caches.reduce((sum, c) => sum + c.entries, 0) : '—';
       csEl.innerHTML = `<span class="stat-num">${s.cacheStorage.count}</span> <span data-locale-text="statCaches">${t.statCaches}</span> <span class="stat-sub">(${total} <span data-locale-text="statEntries">${t.statEntries}</span>)</span>`;
       }
     }
@@ -916,9 +1015,10 @@ class HAPurgeCache extends HTMLElement {
     this._renderLsKeys();
   }
 
-  _renderLsKeys() {
+  _renderLsKeys(snapshotNames = null) {
     const container = this.shadowRoot?.querySelector('#ls-keys');
     if (!container) return;
+    if (!this._authorized() || !this._stats.localStorage) { container.textContent = ''; return; }
     const t = this._t;
     const escapeValue = (value) => this._esc(String(value == null ? '' : value));
 
@@ -926,16 +1026,21 @@ class HAPurgeCache extends HTMLElement {
     if (this._stats.localStorage?.error) { readFailed(); return; }
     const keys = [];
     try {
+    if (snapshotNames) {
+      keys.push(...snapshotNames.filter(key => !_PURGE_EXCLUSIONS.has(key)).map(key => ({ key, sizeKB: '—' })));
+    } else {
+    if (localStorage.length > _PURGE_LIMIT) throw new Error('bounded');
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
+      if (typeof key !== 'string' || key.length > _PURGE_NAME_LIMIT) throw new Error('bounded');
       const val = localStorage.getItem(key) || '';
       const sizeB = (key.length + val.length) * 2;
-      keys.push({ key, sizeKB: (sizeB / 1024).toFixed(1), preview: val.substring(0, 60) });
+      keys.push({ key, sizeKB: (sizeB / 1024).toFixed(1) });
     }
-    } catch (e) { readFailed(); return; }
+    } } catch (e) { readFailed(); return; }
     keys.sort((a, b) => parseFloat(b.sizeKB) - parseFloat(a.sizeKB));
 
-    container.innerHTML = keys.map(k => `
+    container.innerHTML = keys.filter(k => !_PURGE_EXCLUSIONS.has(k.key)).map(k => `
       <div class="key-row">
         <span class="key-name" title="${escapeValue(k.key)}">${escapeValue(k.key.length > 40 ? k.key.substring(0, 37) + '...' : k.key)}</span>
         <span class="key-size">${k.sizeKB} KB</span>
@@ -946,132 +1051,372 @@ class HAPurgeCache extends HTMLElement {
     container.querySelectorAll('.btn-danger[data-key]').forEach(btn => {
       btn.addEventListener('click', () => {
         const keyToDelete = btn.getAttribute('data-key');
-        this._confirm(this._t.confirmKey(keyToDelete), async () => {
-          try {
-            localStorage.removeItem(keyToDelete);
-            if (localStorage.getItem(keyToDelete) !== null) throw new Error(this._t.statReadFailed);
-            this._addLog(`${this._t.deleteKey}: ${keyToDelete}`, 'success');
-          } catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
-          await this._collectStats();
-          this.shadowRoot.querySelector('#keys-toggle')?.focus();
-        }, keyToDelete);
+        this._confirm(this._t.confirmKey(keyToDelete), () => this._runSelected('deleteKey', ['localStorage'], keyToDelete), keyToDelete);
       });
     });
   }
 
-  async _purgeLocalStorage() {
-    let ok = false;
-    try {
-      const count = localStorage.length;
-      localStorage.clear();
-      ok = localStorage.length === 0;
-      this._addLog(ok ? this._t.logLsCleared(count) : this._t.logLsFailed(localStorage.length), ok ? 'success' : 'error');
-    } catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
-    await this._collectStats();
-    return ok;
+  _authorized() {
+    const user = this._hass?.user;
+    return user?.is_admin === true && user.is_active !== false && this._hass?.connection?.connected !== false;
   }
 
-  async _purgeSessionStorage() {
-    let ok = false;
+  _authoritySignature(hass = this._hass) {
+    const user = hass?.user;
     try {
-      const count = sessionStorage.length;
-      sessionStorage.clear();
-      ok = sessionStorage.length === 0;
-      this._addLog(ok ? this._t.logSsCleared(count) : this._t.logSsFailed, ok ? 'success' : 'error');
-    } catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
-    await this._collectStats();
-    return ok;
+      return JSON.stringify([user?.id ?? null, user?.is_admin === true, user?.is_active !== false,
+        (user?.groups || []).map(group => typeof group === 'string' ? group : group?.id ?? null).sort(),
+        hass?.config ?? null, window.location.origin]);
+    } catch (_) { return null; }
   }
 
-  async _purgeServiceWorkers() {
-    let ok = true;
+  _token() {
+    return { epoch: this._epoch, signature: this._authoritySignature(), connection: this._hass?.connection };
+  }
+
+  _current(token) {
+    if (token.epoch !== this._epoch) return false;
+    if (!this.isConnected || !this._authorized() || token.signature === null ||
+        token.signature !== this._authoritySignature() || token.connection !== this._hass?.connection) {
+      this._invalidate();
+      return false;
+    }
+    return true;
+  }
+
+  _invalidate() {
+    this._epoch++;
+    if (this._reloadTimer) clearTimeout(this._reloadTimer);
+    this._reloadTimer = null;
+    this._fetchController?.abort();
+    this._closeConfirm(false);
+    this._actionResult = null;
+    this._stats = {};
+    this._loading = false;
+    for (const id of ['purge-result', 'ls-keys', 'action-log', 'stat-ls', 'stat-ss', 'stat-sw', 'stat-cs', 'stat-ts', 'ha-version']) {
+      const node = this.shadowRoot?.getElementById(id);
+      if (node) node.textContent = '';
+    }
+    this._refreshActionControls();
+  }
+
+  _refreshActionControls() {
+    const disabled = !this.isConnected || !this._authorized() || !!this._operationPromise;
+    this.shadowRoot?.querySelectorAll('.action-btn, button[data-key]').forEach(button => {
+      button.disabled = disabled || (button.id === 'btn-hard-reload' && this._actionResult && this._actionResult.status !== 'success');
+    });
+  }
+
+  async _bounded(promise) {
+    let timer;
     try {
-      const workers = navigator.serviceWorker;
-      if (!workers || typeof workers.getRegistrations !== 'function') {
-        this._addLog(this._t.logSwUnavailable, 'info');
-      } else {
-        const regs = await workers.getRegistrations();
-        let count = 0;
-        for (const reg of regs) {
-          try { if (await reg.unregister()) count++; }
-          catch (e) { ok = false; this._addLog(this._t.logSwError(e.message), 'error'); }
-        }
-        this._addLog(this._t.logSwUnregistered(count), 'success');
+      return await Promise.race([promise, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('unconfirmed')), 5000);
+      })]);
+    } finally { clearTimeout(timer); }
+  }
+
+  _emptyComponent(store) {
+    const units = { localStorage: 'keys', sessionStorage: 'keys', cacheStorage: 'caches', serviceWorkers: 'registrations', toolScripts: 'refetches' };
+    return { store, unit: units[store], status: 'unconfirmed', before: null, after: null,
+      removed: null, failed: null, unknown: null, untouched: null,
+      beforeNames: [], afterNames: [], removedNames: [], failedNames: [], reason: 'read_unavailable' };
+  }
+
+  async _snapshot(store, key, token) {
+    if (!this._current(token)) return null;
+    if (store === 'localStorage' || store === 'sessionStorage') {
+      const api = window[store];
+      if (key != null) {
+        if (typeof key !== 'string' || key.length > _PURGE_NAME_LIMIT) throw new Error('bounded');
+        // Read existence only: values never enter a snapshot or result.
+        return { api, names: api.getItem(key) === null ? [] : [key], untouched: null };
       }
-    } catch (e) { ok = false; this._addLog(this._t.logSwError(e.message), 'error'); }
-    await this._collectStats();
-    return ok;
-  }
-
-  async _purgeCacheStorage() {
-    let ok = true;
-    try {
-      const cacheApi = window.caches;
-      if (!cacheApi || typeof cacheApi.keys !== 'function') {
-        this._addLog(this._t.logCsUnavailable, 'info');
-      } else {
-        const names = await cacheApi.keys();
-        let count = 0;
-        for (const name of names) {
-          try { if (await cacheApi.delete(name)) count++; }
-          catch (e) { ok = false; this._addLog(this._t.logCsError(e.message), 'error'); }
-        }
-        this._addLog(this._t.logCsDeleted(count), 'success');
+      const length = api.length;
+      if (!Number.isInteger(length) || length < 0 || length > _PURGE_LIMIT) throw new Error('bounded');
+      const names = [], excluded = [];
+      for (let index = 0; index < length; index++) {
+        const name = api.key(index);
+        if (typeof name !== 'string' || name.length > _PURGE_NAME_LIMIT) throw new Error('bounded');
+        (store === 'localStorage' && _PURGE_EXCLUSIONS.has(name) ? excluded : names).push(name);
       }
-    } catch (e) { ok = false; this._addLog(this._t.logCsError(e.message), 'error'); }
-    await this._collectStats();
-    return ok;
+      if (api.length !== length || new Set([...names, ...excluded]).size !== length) throw new Error('unstable');
+      return { api, names, untouched: excluded.length };
+    }
+    if (store === 'cacheStorage') {
+      const api = window.caches;
+      if (!api || typeof api.keys !== 'function' || typeof api.delete !== 'function') throw new Error('unavailable');
+      const names = await this._bounded(api.keys());
+      if (!this._current(token)) return null;
+      if (!Array.isArray(names) || names.length > _PURGE_LIMIT || names.some(name => typeof name !== 'string' || name.length > _PURGE_NAME_LIMIT) || new Set(names).size !== names.length) throw new Error('bounded');
+      // Do not open cache names to count entries: opening could recreate a deleted cache.
+      return { api, names, untouched: null };
+    }
+    const api = navigator.serviceWorker;
+    if (!api || typeof api.getRegistrations !== 'function') throw new Error('unavailable');
+    const registrations = await this._bounded(api.getRegistrations());
+    if (!this._current(token)) return null;
+    if (!Array.isArray(registrations) || registrations.length > _PURGE_LIMIT) throw new Error('bounded');
+    const names = registrations.map(registration => registration.scope);
+    if (names.some(name => typeof name !== 'string' || name.length > _PURGE_NAME_LIMIT) || new Set(names).size !== names.length) throw new Error('bounded');
+    return { api, registrations, names, untouched: null };
   }
 
-  async _forceReloadTools() {
+  async _produce(store, key, token) {
+    const row = this._emptyComponent(store);
+    let before;
+    try { before = await this._snapshot(store, key, token); }
+    catch (_) { return row; }
+    if (!before || !this._current(token)) return null;
+    row.before = before.names.length;
+    if (store !== 'serviceWorkers') row.beforeNames = [...before.names];
+    row.untouched = before.untouched;
+    row.removed = 0; row.failed = 0; row.unknown = 0;
+    row.reason = null;
+    if (store === 'cacheStorage') row.entries = { before: null, after: null, reason: 'not_measured' };
+    const outcomes = new Map();
+    for (let index = 0; index < before.names.length; index++) {
+      if (!this._current(token)) return null;
+      const name = before.names[index];
+      // UI-owned dismissal persistence cannot be deleted via a direct per-key call either.
+      if (store === 'localStorage' && _PURGE_EXCLUSIONS.has(name)) {
+        outcomes.set(name, 'untouched'); continue;
+      }
+      try {
+        let acknowledged;
+        if (store === 'localStorage' || store === 'sessionStorage') {
+          before.api.removeItem(name); acknowledged = true;
+        } else if (store === 'cacheStorage') {
+          acknowledged = (await this._bounded(before.api.delete(name))) === true;
+        } else {
+          acknowledged = (await this._bounded(before.registrations[index].unregister())) === true;
+        }
+        if (!this._current(token)) return null;
+        outcomes.set(name, acknowledged ? 'ack' : 'not_acknowledged');
+      } catch (_) {
+        if (!this._current(token)) return null;
+        // A rejection/timeout may follow an unknown side effect. Readback decides below.
+        outcomes.set(name, 'not_acknowledged');
+      }
+    }
+    let after;
+    try { after = await this._snapshot(store, key, token); }
+    catch (_) {
+      if (!this._current(token)) return null;
+      row.unknown = before.names.length; row.reason = 'readback_unavailable';
+      row.status = 'unconfirmed'; return row;
+    }
+    if (!after || !this._current(token)) return null;
+    row.after = after.names.length;
+    row.untouchedAfter = after.untouched;
+    if (store !== 'serviceWorkers') row.afterNames = [...after.names];
+    const remaining = new Set(after.names);
+    for (const name of before.names) {
+      const outcome = outcomes.get(name);
+      if (outcome === 'untouched') { row.untouched = (row.untouched ?? 0) + 1; continue; }
+      if (outcome === 'ack' && !remaining.has(name)) {
+        row.removed++; if (store !== 'serviceWorkers') row.removedNames.push(name);
+      } else if (remaining.has(name)) {
+        row.failed++; if (store !== 'serviceWorkers') row.failedNames.push(name);
+      } else { row.unknown++; }
+    }
+    // New entries are independent observed survivors, never attributed removals.
+    row.newEntries = after.names.filter(name => !before.names.includes(name)).length;
+    const incomplete = row.failed > 0 || row.unknown > 0 || row.newEntries > 0 || outcomes.has(key) && outcomes.get(key) === 'untouched';
+    row.status = !incomplete ? 'success' : row.removed > 0 ? 'partial' : row.failed > 0 ? 'error' : 'unconfirmed';
+    if (incomplete) row.reason = 'incomplete';
+    return row;
+  }
+
+  async _consumeRefetch(response) {
+    // Consume only same-origin script bytes, discard immediately; never retain payloads.
+    const byteLimit = 8 * 1024 * 1024;
+    if (response.body && typeof response.body.getReader === 'function') {
+      const reader = response.body.getReader();
+      let size = 0;
+      try {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) return;
+          size += chunk.value?.byteLength ?? 0;
+          if (size > byteLimit) throw new Error('bounded');
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+    }
+    if (typeof response.arrayBuffer !== 'function') throw new Error('unconfirmed');
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > byteLimit) throw new Error('bounded');
+  }
+
+  async _refetchScripts(token) {
+    const row = this._emptyComponent('toolScripts');
+    row.reason = 'refetch_unavailable';
     try {
-      // HA imports HACS modules dynamically: they need not have a script tag.
       const observed = [...Array.from(document.head.querySelectorAll('script[src]'), tag => tag.src),
         ...(typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource').map(entry => entry.name) : [])];
-      const urls = [...new Set(observed.filter(value => {
-        const url = new URL(value, window.location.href);
-        return url.origin === window.location.origin && /^\/(?:local\/community|hacsfiles)\/.+\.js$/.test(url.pathname);
-      }))];
-      if (!urls.length) { this._addLog(this._t.logNoPanel, 'info'); return true; }
-      let loaded = 0;
+      if (observed.length > _PURGE_LIMIT) return row;
+      const urls = [...new Set(observed.map(value => {
+        try {
+          const url = new URL(value, window.location.href);
+          if (url.origin !== window.location.origin || !/^\/(?:local\/community|hacsfiles)\/.+\.js$/.test(url.pathname)) return null;
+          url.searchParams.delete('_force');
+          return url.toString();
+        } catch (_) { return null; }
+      }).filter(Boolean))];
+      row.before = urls.length; row.after = null; row.refetched = 0; row.failed = 0; row.unknown = 0;
+      const completed = [];
+      this._fetchController = new AbortController();
       for (const value of urls) {
+        if (!this._current(token)) return null;
         const url = new URL(value, window.location.href);
         url.searchParams.set('_force', Date.now());
-        try { if ((await fetch(url.toString(), { cache: 'no-store' })).ok) loaded++; }
-        catch (_) { /* Aggregate failures below without exposing response data. */ }
+        try {
+          const response = await this._bounded(fetch(url.toString(), { cache: 'no-store', signal: this._fetchController.signal }));
+          if (!this._current(token)) return null;
+          if (response.ok === true) {
+            await this._bounded(this._consumeRefetch(response));
+            if (!this._current(token)) return null;
+            completed.push(url.toString());
+          } else row.failed++;
+        } catch (_) {
+          if (!this._current(token)) return null;
+          this._fetchController.abort();
+          break;
+        }
       }
-      this._addLog(this._t.logToolsReloaded(loaded, urls.length), loaded === urls.length ? 'success' : 'error');
-      return loaded === urls.length;
-    } catch (e) { this._addLog(this._t.logCsError(e.message), 'error'); return false; }
+      if (!this._current(token)) return null;
+      // Resource timing is an independent readback of the exact requested URLs.
+      // A response ACK alone, missing timing, or incomplete body cannot turn green.
+      const resources = typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource') : null;
+      if (Array.isArray(resources) && resources.length <= _PURGE_LIMIT * 2) {
+        const names = new Set(resources.map(entry => entry.name));
+        row.refetched = completed.filter(url => names.has(url)).length;
+        row.after = row.refetched;
+      }
+      row.unknown = urls.length - row.refetched - row.failed;
+      row.status = row.failed === 0 && row.unknown === 0 ? 'success' : row.refetched > 0 ? 'partial' : row.failed > 0 ? 'error' : 'unconfirmed';
+      row.reason = row.status === 'success' ? 'refetched_not_executed' : 'refetch_incomplete';
+      return row;
+    } catch (_) { return row; }
+    finally { this._fetchController?.abort(); this._fetchController = null; }
   }
 
-  async _purgeAll() {
-    this._addLog(this._t.logPurgeStart, 'info');
-    const results = [];
-    results.push(await this._purgeLocalStorage());
-    results.push(await this._purgeSessionStorage());
-    results.push(await this._purgeServiceWorkers());
-    results.push(await this._purgeCacheStorage());
-    results.push(await this._forceReloadTools());
-    if (results.every(Boolean)) {
-      this._addLog(this._t.logPurgeDone, 'success');
-      this._hardReload();
-    } else { this._addLog(this._t.logPurgeIncomplete, 'error'); }
+  _applySelectedReadback(row, key) {
+    const ids = { localStorage: 'stat-ls', sessionStorage: 'stat-ss', serviceWorkers: 'stat-sw', cacheStorage: 'stat-cs', toolScripts: 'stat-ts' };
+    const node = this.shadowRoot.querySelector('#' + ids[row.store]);
+    if (!node) return;
+    const t = this._t;
+    if (key != null || row.store === 'toolScripts') {
+      // Exact-key and script-refetch scopes cannot infer the whole-store/registry statistic.
+      node.textContent = this._lang === 'pl' ? 'Wybrany zakres: wynik poniżej' : 'Selected scope: result below';
+      return;
+    }
+    if (row.after == null) {
+      this._stats[row.store] = { count: null, error: 'read_failed' };
+      node.innerHTML = `<span class="stat-num stat-unavail">—</span> <span data-locale-text="statReadFailed">${t.statReadFailed}</span>`;
+      if (row.store === 'localStorage') this.shadowRoot.querySelector('#ls-keys').textContent = t.statReadFailed;
+      return;
+    }
+    const count = row.after + (row.store === 'localStorage' ? row.untouchedAfter ?? 0 : 0);
+    const label = row.store === 'serviceWorkers' ? 'statRegistered' : row.store === 'cacheStorage' ? 'statCaches' : 'statKeys';
+    this._stats[row.store] = row.store === 'cacheStorage'
+      ? { count, caches: row.afterNames.map(name => ({ name, entries: null })) }
+      : { count, sizeKB: null, scopes: [] };
+    node.innerHTML = `<span class="stat-num">${count}</span> <span data-locale-text="${label}">${t[label]}</span>`;
+    if (row.store === 'localStorage') this._renderLsKeys(row.afterNames);
   }
 
-  async _purgeCachesOnly() {
-    const workers = await this._purgeServiceWorkers();
-    const cache = await this._purgeCacheStorage();
-    if (workers && cache) this._hardReload();
-    else this._addLog(this._t.logPurgeIncomplete, 'error');
+  _runSelected(action, stores, key = null) {
+    if (!this.isConnected || !this._authorized()) return Promise.resolve(null);
+    if (this._operationPromise) return this._operationPromise;
+    this._epoch++; // In-flight overview reads cannot overwrite the action's newer evidence.
+    const token = this._token();
+    this._closeConfirm(false);
+    this._actionResult = null;
+    this._renderResult();
+    // Yield once so the coalescing slot is installed before any producer runs.
+    const operation = Promise.resolve().then(async () => {
+      const components = [];
+      for (const store of stores) {
+        if (!this._current(token)) return null;
+        const row = store === 'toolScripts' ? await this._refetchScripts(token) : await this._produce(store, key, token);
+        if (!row || !this._current(token)) return null;
+        components.push(row);
+      }
+      if (!this._current(token)) return null;
+      const allSuccess = components.every(row => row.status === 'success');
+      const status = allSuccess ? 'success' : components.some(row => row.status === 'success' || row.status === 'partial') ? 'partial' : components.some(row => row.status === 'error') ? 'error' : 'unconfirmed';
+      this._actionResult = { action, status, components, epoch: token.epoch,
+        httpCache: { status: 'unconfirmed', before: null, after: null, removed: null, reason: 'not_verifiable_by_browser_js' } };
+      for (const row of components) this._applySelectedReadback(row, key);
+      this._renderResult();
+      this._addLog(allSuccess ? (this._lang === 'pl' ? 'Wynik akcji jest gotowy do przeglądu.' : 'Action result is ready for review.') : (this._lang === 'pl' ? 'Błąd akcji: wynik niedostępny lub niepełny.' : 'Action error: result unavailable or incomplete.'), allSuccess ? 'info' : 'error');
+      if (key != null) {
+        const button = [...this.shadowRoot.querySelectorAll('button[data-key]')].find(node => node.dataset.key === key);
+        if (components[0]?.removed === 1) button?.closest('.key-row')?.remove();
+        this.shadowRoot.querySelector('#keys-toggle')?.focus();
+      }
+      return this._actionResult;
+    }).catch(() => {
+      if (!this._current(token)) return null;
+      this._actionResult = { action, status: 'unconfirmed', components: stores.map(store => this._emptyComponent(store)), epoch: token.epoch,
+        httpCache: { status: 'unconfirmed', before: null, after: null, removed: null, reason: 'not_verifiable_by_browser_js' } };
+      this._renderResult();
+      this._addLog(this._lang === 'pl' ? 'Nie można potwierdzić wyniku.' : 'Result could not be confirmed.', 'error');
+      return this._actionResult;
+    }).finally(() => {
+      if (this._operationPromise === operation) this._operationPromise = null;
+      this._refreshActionControls();
+    });
+    this._operationPromise = operation;
+    this._refreshActionControls();
+    return operation;
   }
 
-  _hardReload() {
+  _purgeLocalStorage() { return this._runSelected('localStorage', ['localStorage']); }
+  _purgeSessionStorage() { return this._runSelected('sessionStorage', ['sessionStorage']); }
+  _purgeServiceWorkers() { return this._runSelected('serviceWorkers', ['serviceWorkers']); }
+  _purgeCacheStorage() { return this._runSelected('cacheStorage', ['cacheStorage']); }
+  _forceReloadTools() { return this._runSelected('refetchScripts', ['toolScripts']); }
+  _purgeAll() { return this._runSelected('all', ['localStorage', 'sessionStorage', 'serviceWorkers', 'cacheStorage', 'toolScripts']); }
+  _purgeCachesOnly() { return this._runSelected('cachesOnly', ['serviceWorkers', 'cacheStorage']); }
+
+  _renderResult() {
+    const container = this.shadowRoot?.querySelector('#purge-result');
+    if (!container) return;
+    if (!this._authorized() || !this._actionResult) { container.textContent = ''; return; }
+    const pl = this._lang === 'pl';
+    const ui = createUiV3({ language: this._lang });
+    const labels = pl
+      ? { before: 'Przed', after: 'Po', removed: 'Usunięte', failed: 'Nieusunięte', unknown: 'Nieznane', untouched: 'Wyłączone z usuwania (odczytane)', refetched: 'Pobrane ponownie', keys: 'klucze', caches: 'cache', registrations: 'rejestracje', refetches: 'skrypty' }
+      : { before: 'Before', after: 'After', removed: 'Removed', failed: 'Failed', unknown: 'Unknown', untouched: 'Excluded (observed)', refetched: 'Refetched', keys: 'keys', caches: 'caches', registrations: 'registrations', refetches: 'scripts' };
+    const count = value => value == null ? (pl ? 'nieznane' : 'unknown') : String(value);
+    container.innerHTML = `<h3>${pl ? 'Wynik wybranej akcji' : 'Selected action result'}</h3>${ui.statusHtml(this._actionResult.status)}` + this._actionResult.components.map(row => {
+      const fields = row.store === 'toolScripts' ? ['before', 'after', 'refetched', 'failed', 'unknown'] : ['before', 'after', 'removed', 'failed', 'unknown'];
+      if (row.untouched != null) fields.push('untouched');
+      return `<section class="purge-component"><h4>${this._esc(row.store)} · ${labels[row.unit]}</h4>${ui.statusHtml(row.status)}<dl>${fields.map(field => `<div><dt>${labels[field]}</dt><dd>${count(row[field])}</dd></div>`).join('')}</dl>` +
+        (row.removedNames.length ? `<p>${labels.removed}: ${row.removedNames.map(name => `<code>${this._esc(name)}</code>`).join(', ')}</p>` : '') +
+        (row.failedNames.length ? `<p>${labels.failed}: ${row.failedNames.map(name => `<code>${this._esc(name)}</code>`).join(', ')}</p>` : '') +
+        (row.store === 'toolScripts' ? `<p>${pl ? 'Pobranie nie oznacza wykonania skryptów.' : 'Refetch does not execute scripts.'}</p>` : '') +
+        (row.store === 'serviceWorkers' ? `<p>${pl ? 'Usunięcie rejestracji nie kończy kontroli aktywnej strony; po przeglądzie wyniku potwierdź przeładowanie.' : 'Unregistration does not stop control of the active page; review the result before confirming reload.'}</p>` : '') +
+        (row.store === 'cacheStorage' ? `<p>${pl ? 'Liczba wpisów cache: nieznana (nie odczytano).' : 'Cache entry counts: unknown (not read).'}</p>` : '') +
+        (row.newEntries ? `<p>${pl ? 'Nowe wpisy po akcji' : 'New entries after action'}: ${row.newEntries}</p>` : '') + '</section>';
+    }).join('') + `<p>${pl ? 'Pozostałe magazyny: nie wybrano, nie sprawdzono.' : 'Other stores: not selected, not checked.'}</p><p>${ui.statusHtml('unconfirmed')} ${pl ? 'Cache HTTP: nieznany; JavaScript przeglądarki nie może potwierdzić usunięcia.' : 'HTTP cache: unknown; browser JavaScript cannot verify deletion.'}</p><p>${this._actionResult.status === 'success' ? (pl ? 'Przejrzyj wynik, następnie osobno potwierdź Hard Reload.' : 'Review this result, then confirm Hard Reload separately.') : (pl ? 'Niepełny wynik pozostaje widoczny. Przeładowanie jest zablokowane do pomyślnego zakończenia wybranej akcji.' : 'Incomplete result remains visible. Reload is blocked until the selected action succeeds.')}</p>`;
+    this._refreshActionControls();
+  }
+
+  _hardReload(reviewed = false) {
+    if (reviewed !== true) return;
+    if (!this.isConnected || !this._authorized() || this._operationPromise || this._reloadTimer ||
+        this._actionResult && this._actionResult.status !== 'success') return;
+    const token = this._token();
+    this._actionResult = { action: 'hardReload', status: 'unconfirmed', components: [], epoch: token.epoch,
+      httpCache: { status: 'unconfirmed', before: null, after: null, removed: null, reason: 'not_verifiable_by_browser_js' } };
+    this._renderResult();
     this._addLog(this._t.logHardReload, 'info');
     this._reloadTimer = setTimeout(() => {
       this._reloadTimer = null;
-      if (!this.isConnected) return;
-      // Cache-busting reload (location.reload(true) is deprecated in modern browsers)
+      if (!this._current(token)) return;
       const url = new URL(window.location.href);
       url.searchParams.set('_cb', Date.now());
       window.location.replace(url.toString());
@@ -1080,13 +1425,14 @@ class HAPurgeCache extends HTMLElement {
 
   _addLog(msg, type = 'info') {
     const logEl = this.shadowRoot?.querySelector('#action-log');
-    if (!logEl) return;
+    if (!logEl || !this._authorized()) return;
     const time = new Date().toLocaleTimeString(this._lang === 'pl' ? 'pl-PL' : 'en-US');
     const typeClass = type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : 'log-info';
     const entry = document.createElement('div');
     entry.className = `log-entry ${typeClass}`;
     entry.innerHTML = `<span class="log-time">${time}</span> ${this._esc(msg)}`;
     logEl.prepend(entry);
+    while (logEl.children.length > 30) logEl.lastElementChild.remove();
   }
 
   _render() {
@@ -1096,6 +1442,7 @@ class HAPurgeCache extends HTMLElement {
     this._rendered = true;
     this.shadowRoot.innerHTML = `
       <style>${HA_PURGE_CACHE_BENTO_CSS}
+${createUiV3({ language: this._lang }).css}
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
 
 /* Donation footer — diamond top */
@@ -1403,6 +1750,19 @@ class HAPurgeCache extends HTMLElement {
         .confirm-dialog { box-sizing: border-box; max-height: 90vh; overflow-y: auto; background: var(--bento-card); padding: 24px; border-radius: var(--bento-radius-md); max-width: 420px; width: 90%; box-shadow: var(--bento-shadow-lg); }
         .confirm-dialog h3 { margin: 0 0 12px; font-size: 16px; color: var(--bento-text); }
         .confirm-dialog p { overflow-wrap: anywhere; margin: 0 0 20px; font-size: 13px; color: var(--bento-text-secondary); line-height: 1.6; white-space: pre-wrap; }
+        .action-btn, .btn-sm, .btn-cancel, .btn-confirm-ok { min-width: 44px; min-height: 44px; }
+        .action-btn:disabled, .btn-sm:disabled { opacity: .55; cursor: default; }
+        .purge-result { min-width: 0; overflow-wrap: anywhere; color: var(--bento-text); }
+        .purge-result h3 { font-size: 16px; }
+        .purge-component { padding: 12px 0; border-bottom: 1px solid var(--bento-border); }
+        .purge-component h4 { margin: 0 0 8px; overflow-wrap: anywhere; }
+        .purge-component dl { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0; }
+        .purge-component dl div { min-width: 0; }
+        .purge-component dt, .purge-result p { font-size: 12px; line-height: 1.6; }
+        .purge-component dd { margin: 0; font-weight: 600; }
+        .purge-component code { white-space: normal; overflow-wrap: anywhere; }
+        .key-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+        .key-row { flex-wrap: wrap; min-width: 0; }
         .confirm-dialog-btns { display: flex; gap: 8px; justify-content: flex-end; }
         .btn-cancel { padding: 8px 18px; border: 1px solid var(--bento-border); border-radius: var(--bento-radius-xs); background: var(--bento-bg); color: var(--bento-text); font-size: 13px; cursor: pointer; }
         .btn-confirm-ok { padding: 8px 18px; border: none; border-radius: var(--bento-radius-xs); background: var(--bento-error); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -1592,6 +1952,7 @@ class HAPurgeCache extends HTMLElement {
               </button>
             </div>
 
+            <div id="purge-result" class="purge-result" role="status" aria-live="polite"></div>
             <div class="log-section">
               <div class="log-header" data-locale-text="logHeader">${t.logHeader}</div>
               <div id="action-log">
@@ -1634,11 +1995,15 @@ class HAPurgeCache extends HTMLElement {
     this.shadowRoot.querySelector('#confirm-cancel').addEventListener('click', () => this._closeConfirm());
     this.shadowRoot.querySelector('#confirm-ok').addEventListener('click', async () => {
       const action = this._pendingConfirm;
+      const token = this._confirmToken;
       this._closeConfirm();
-      try { if (action) await action(); }
-      catch (e) { this._addLog(this._t.logStorageError(e.message), 'error'); }
+      try { if (action && token && this._current(token)) await action(); }
+      catch (_) { this._addLog(this._lang === 'pl' ? 'Nie można potwierdzić akcji.' : 'Action could not be confirmed.', 'error'); }
     });
     overlay.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat && ['confirm-ok', 'confirm-cancel'].includes(this.shadowRoot.activeElement?.id)) {
+        e.preventDefault(); e.stopPropagation(); this.shadowRoot.activeElement.click();
+      }
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this._closeConfirm(); }
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -1656,7 +2021,7 @@ class HAPurgeCache extends HTMLElement {
     this.shadowRoot.querySelector('#btn-reload-tools').addEventListener('click', () => this._forceReloadTools());
     this.shadowRoot.querySelector('#btn-purge-all').addEventListener('click', () => this._confirm(this._t.confirmAll, () => this._purgeAll()));
     this.shadowRoot.querySelector('#btn-purge-caches').addEventListener('click', () => this._purgeCachesOnly());
-    this.shadowRoot.querySelector('#btn-hard-reload').addEventListener('click', () => this._confirm(this._t.confirmHardReload, () => this._hardReload()));
+    this.shadowRoot.querySelector('#btn-hard-reload').addEventListener('click', () => this._confirm(this._actionResult ? `${this._t.confirmHardReload}\n\n${this._lang === 'pl' ? 'Potwierdzam, że przejrzałem wynik wybranej akcji.' : 'I confirm that I reviewed the selected action result.'}` : this._t.confirmHardReload, () => this._hardReload(true)));
 
     // Toggle LS keys
     const toggle = this.shadowRoot.querySelector('#keys-toggle');
@@ -1668,13 +2033,12 @@ class HAPurgeCache extends HTMLElement {
     });
     if (previousLog != null) this.shadowRoot.querySelector('#action-log').innerHTML = previousLog;
     this._updateDisplay();
+    this._renderResult();
+    this._refreshActionControls();
   }
 
-  disconnectedCallback() {
-    if (this._reloadTimer) clearTimeout(this._reloadTimer);
-    this._reloadTimer = null;
-    this._pendingConfirm = null;
-  }
+  disconnectedCallback() { this._invalidate(); }
+
 }
 
 if (!customElements.get('ha-purge-cache')) {
