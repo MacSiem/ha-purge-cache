@@ -186,7 +186,7 @@ test('single-key confirmation cancels safely, restores focus, traps Tab and supp
   ok.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); assert.equal(root.activeElement, cancel);
   cancel.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); assert.equal(root.activeElement, trigger); assert.equal(w.localStorage.getItem('one'), 'discard');
   for (const key of ['Enter', ' ']) {
-   trigger.click(); ok.dispatchEvent(new w.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); await tick();
+   trigger.click(); ok.focus(); ok.dispatchEvent(new w.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); await tick();
    assert.equal(w.localStorage.getItem('one'), null); assert.equal(w.localStorage.getItem('two'), 'retain');
    assert.equal(root.activeElement, root.querySelector('#keys-toggle'));
    if (key === 'Enter') { w.localStorage.setItem('one', 'discard'); await card._collectStats(); trigger = root.querySelector('[data-key="one"]'); }
@@ -277,7 +277,7 @@ test('offline household can still explicitly purge its local browser storage',as
 });
 test('current overview retains actual cache-entry counts; selected purge does not open caches',async()=>{
  const f=await setup();try{let opens=0;const names=new Set(['fixture']);f.w.caches={keys:async()=>[...names],open:async()=>{opens++;return {keys:async()=>['a','b','c']};},delete:async n=>names.delete(n)};
- await f.card._collectStats();assert.equal(f.card._stats.cacheStorage.caches[0].entries,3);assert.match(f.root.querySelector('#stat-cs').textContent,/3/);const baseline=opens;await f.card._purgeCacheStorage();assert.equal(opens,baseline);assert.equal(selected(f.card,'cacheStorage').removed,1);
+ await f.card._collectStats();assert.equal(f.card._stats.cacheStorage.caches[0].entries,3);assert.match(f.root.querySelector('#stat-cs').textContent,/3/);const baseline=opens;f.card.setConfig({inspect_cache_entries:false});await f.card._collectStats();assert.equal(opens,baseline);assert.equal(f.card._stats.cacheStorage.caches[0].entries,null);await f.card._purgeCacheStorage();assert.equal(opens,baseline);assert.equal(selected(f.card,'cacheStorage').removed,1);
  }finally{f.dom.window.close();}
 });
 test('typed disconnect with cached true invalidates a pending browser mutation without late publication',async()=>{
