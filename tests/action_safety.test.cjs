@@ -16,7 +16,7 @@ for(const lang of ['en','pl']) for(const area of ['localStorage','sessionStorage
   const {dom,w,card,root}=setup(lang);
   try {
    w[area].setItem('owned','retained');
-   w.Storage.prototype.clear=function(){throw new w.DOMException('denied','SecurityError');};
+   w.Storage.prototype.removeItem=function(){throw new w.DOMException('denied','SecurityError');};
    await assert.doesNotReject(card[area==='localStorage'?'_purgeLocalStorage':'_purgeSessionStorage']());
    assert.equal(w[area].getItem('owned'),'retained');
    assert.match(root.querySelector('.log-error').textContent,lang==='en'?/error/i:/błąd/i);
@@ -25,14 +25,15 @@ for(const lang of ['en','pl']) for(const area of ['localStorage','sessionStorage
 }
 test('cache-only failure retains its report without reload and can retry',async()=>{
  const {dom,w,card,root}=setup();try{
-  Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistrations:async()=>[{unregister:async()=>{throw Error('denied worker');}}]},configurable:true});
+  Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistrations:async()=>[{scope:'http://localhost/worker/',unregister:async()=>{throw Error('denied worker');}}]},configurable:true});
   w.caches={keys:async()=>['one'],delete:async()=>true};
   await card._purgeCachesOnly();
   assert.equal(card._reloadTimer,null);
-  assert.match(root.querySelector('#action-log').textContent,/denied worker/);
+  assert.doesNotMatch(root.querySelector('#action-log').textContent,/denied worker/);
+  assert.notEqual(card._actionResult.status,'success');
   w.navigator.serviceWorker.getRegistrations=async()=>[];
   await card._purgeCachesOnly();
-  assert.ok(card._reloadTimer,'successful retry may reload');
+  assert.equal(card._reloadTimer,null,'successful retry waits for reviewed reload');
  }finally{dom.window.close();}
 });
 test('full reset reports partial failure and continues independent cleanup',async()=>{
@@ -84,18 +85,19 @@ test('missing API members are unavailable rather than false deletion failures',a
   Object.defineProperty(w,'caches',{value:undefined,configurable:true});
   await card._purgeCachesOnly();
   assert.match(root.querySelector('#action-log').textContent,/unavailable/i);
-  assert.equal(root.querySelectorAll('.log-error').length,0);
+  assert.notEqual(card._actionResult.status,'success');
  }finally{dom.window.close();}
 });
 test('loaded HACS modules are refetched without executing or claiming to reset HTTP cache',async()=>{
  const {dom,w,card,root}=setup();try{
-  Object.defineProperty(w.performance,'getEntriesByType',{value:()=>[{name:'http://localhost/hacsfiles/ha-purge-cache/ha-purge-cache.js?v=4.1.15'},{name:'http://localhost/private.js'}]});
+  const resources=[{name:'http://localhost/hacsfiles/ha-purge-cache/ha-purge-cache.js?v=4.1.15'},{name:'http://localhost/private.js'}];
+  Object.defineProperty(w.performance,'getEntriesByType',{value:()=>resources});
   w.fetch=async(url,options)=>{
    assert.match(url,/\/hacsfiles\/ha-purge-cache\/ha-purge-cache\.js\?v=4\.1\.15&_force=/);
-   assert.equal(options.cache,'no-store');return {ok:true};
+   assert.equal(options.cache,'no-store');resources.push({name:url});return {ok:true,arrayBuffer:async()=>new ArrayBuffer(0)};
   };
   await card._forceReloadTools();
-  assert.match(root.querySelector('.log-success').textContent,/1\/1/);
+  assert.equal(card._actionResult.components[0].refetched,1);
   assert.equal(root.querySelectorAll('.log-error').length,0);
  }finally{dom.window.close();}
 });

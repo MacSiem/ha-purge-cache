@@ -7,7 +7,7 @@ const source=readFileSync(join(__dirname,'..','ha-purge-cache.js'),'utf8');
 function setup(language='en') {
  const dom=new JSDOM('',{url:'http://localhost/',runScripts:'dangerously',pretendToBeVisual:true});
  dom.window.eval(source);const card=dom.window.document.createElement('ha-purge-cache');
- card.hass={language,states:{},user:{is_admin:false}};dom.window.document.body.append(card);
+ card.hass={language,states:{},user:{id:'fixture-household',is_admin:false,is_active:true},connection:{connected:true}};dom.window.document.body.append(card);
  return {dom,w:dom.window,card,root:card.shadowRoot};
 }
 for(const language of ['en','pl']) for(const api of ['serviceWorker','caches']) {
@@ -21,7 +21,8 @@ for(const language of ['en','pl']) for(const api of ['serviceWorker','caches']) 
    assert.match(root.querySelector(api==='serviceWorker'?'#stat-sw':'#stat-cs').textContent,language==='pl'?/Błąd odczytu/:/Read failed/);
    await assert.doesNotReject(card._purgeCachesOnly());
    assert.equal(card._reloadTimer,null);
-   assert.match(root.querySelector('#action-log').textContent,/actual browser denial/);
+   assert.doesNotMatch(root.querySelector('#action-log').textContent,/actual browser denial/);
+   assert.notEqual(card._actionResult.status,'success');
   }finally{dom.window.close();}
  });
 }
@@ -30,7 +31,7 @@ test('configured long title is rendered literally and preserved across ordinary 
   const title='Kitchen & <img data-hostile-title src=x> '+ 'long title '.repeat(40);
   card.setConfig({title});assert.ok(root.querySelector('h2').textContent.includes(title));
   assert.equal(root.querySelector('[data-hostile-title]'),null);
-  card.hass={language:'pl',states:{},user:{is_admin:false}};
+  card.hass={language:'pl',states:{},user:{id:'fixture-household',is_admin:false,is_active:true},connection:{connected:true}};
   assert.ok(root.querySelector('h2').textContent.includes(title));
  }finally{dom.window.close();}
 });
@@ -53,18 +54,16 @@ test('successful single-key deletion keeps other data and gives focus to the key
  }finally{dom.window.close();}
 });
 
-for(const denied of [false,true]) test(`stats collected before hass remain visible on first render (denied=${denied})`,async()=>{
+test('stats requested before hass do not inspect private stores',async()=>{
  const dom=new JSDOM('',{url:'http://localhost/',runScripts:'dangerously'});const w=dom.window;
  try{
-  w.eval(source);if(denied)Object.defineProperty(w.navigator,'serviceWorker',{get(){throw new w.DOMException('denied','SecurityError')},configurable:true});
-  const card=w.document.createElement('ha-purge-cache');w.document.body.append(card);await card._collectStats();
-  card.hass={language:'en',states:{},user:{is_admin:false}};
-  assert.match(card.shadowRoot.querySelector('#stat-sw').textContent,denied?/Read failed/:/unavailable/);
-  assert.doesNotMatch(card.shadowRoot.querySelector('#stat-ls').textContent,/•••/);
+  w.eval(source);const card=w.document.createElement('ha-purge-cache');w.document.body.append(card);
+  Object.defineProperty(w,'localStorage',{get(){throw Error('must not read')},configurable:true});
+  await card._collectStats();assert.equal(Object.keys(card._stats).length,0);
  }finally{dom.window.close();}
 });
-test('configuration render retains measured stats and existing action history',async()=>{
+test('configuration change clears private stats and action history',async()=>{
  const {dom,card,root}=setup();try{await card._collectStats();card._addLog('Recorded action','info');card.setConfig({title:'Changed title'});
- assert.match(root.querySelector('#stat-ls').textContent,/0/);assert.match(root.querySelector('#action-log').textContent,/Recorded action/);
+ assert.doesNotMatch(root.querySelector('#action-log').textContent,/Recorded action/);assert.equal(card._actionResult,null);
  }finally{dom.window.close();}
 });

@@ -11,7 +11,8 @@ test('first render survives localStorage access denial', async () => {
   const w=dom.window;w.eval(source);
   Object.defineProperty(w,'localStorage',{get:()=>{throw new w.DOMException('blocked fixture','SecurityError')},configurable:true});
   const card=w.document.createElement('ha-purge-cache');
-  assert.doesNotThrow(()=>{card.hass={language:'en',states:{},themes:{darkMode:false}}});
+  assert.doesNotThrow(()=>{card.hass={language:'en',states:{},themes:{darkMode:false},user:{is_admin:true}}});
+  w.document.body.append(card);
   assert.ok(card.shadowRoot.getElementById('btn-purge-caches'), 'actions must still render');
   assert.doesNotThrow(()=>card.shadowRoot.getElementById('tip-dismiss').click());
   await card._collectStats();
@@ -24,7 +25,7 @@ for (const language of ['en', 'pl']) {
   const dom = new JSDOM('', {runScripts:'dangerously',url:'http://localhost/'});
   try {
    const w=dom.window; w.eval(source);
-   const card=w.document.createElement('ha-purge-cache');card.hass={language,states:{},themes:{darkMode:false}};
+   const card=w.document.createElement('ha-purge-cache');card.hass={language,states:{},themes:{darkMode:false},user:{is_admin:true}};w.document.body.append(card);
    const denied=()=>{throw new w.DOMException('blocked fixture','SecurityError')};
    Object.defineProperty(w,'caches',{value:{keys:async()=>denied()},configurable:true});
    Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistrations:async()=>denied()},configurable:true});
@@ -39,8 +40,8 @@ for (const language of ['en', 'pl']) {
    }
    assert.match(card.shadowRoot.getElementById('ls-keys').textContent,language==='pl'?/Błąd odczytu/:/Read failed/);
    delete w.localStorage;delete w.sessionStorage;delete w.caches;delete w.navigator.serviceWorker;
-   Object.defineProperty(w,'localStorage',{value:{length:0},configurable:true});
-   Object.defineProperty(w,'sessionStorage',{value:{length:0},configurable:true});
+   Object.defineProperty(w,'localStorage',{value:{length:0,key:()=>null,getItem:()=>null},configurable:true});
+   Object.defineProperty(w,'sessionStorage',{value:{length:0,key:()=>null,getItem:()=>null},configurable:true});
    Object.defineProperty(w,'caches',{value:{keys:async()=>[]},configurable:true});
    Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistrations:async()=>[]},configurable:true});
    await card._collectStats();
