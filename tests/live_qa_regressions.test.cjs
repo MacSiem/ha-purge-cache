@@ -54,12 +54,15 @@ test('successful single-key deletion keeps other data and gives focus to the key
  }finally{dom.window.close();}
 });
 
-test('stats requested before hass do not inspect private stores',async()=>{
+for(const denied of [false,true]) test(`own browser statistics remain usable before HA assignment and offline (denied=${denied})`,async()=>{
  const dom=new JSDOM('',{url:'http://localhost/',runScripts:'dangerously'});const w=dom.window;
  try{
-  w.eval(source);const card=w.document.createElement('ha-purge-cache');w.document.body.append(card);
-  Object.defineProperty(w,'localStorage',{get(){throw Error('must not read')},configurable:true});
-  await card._collectStats();assert.equal(Object.keys(card._stats).length,0);
+  w.eval(source);w.localStorage.setItem('qa-own-browser-key','synthetic');
+  if(denied)Object.defineProperty(w.navigator,'serviceWorker',{get(){throw new w.DOMException('PRIVATE fixture denial','SecurityError')},configurable:true});
+  const card=w.document.createElement('ha-purge-cache');w.document.body.append(card);await card._collectStats();
+  assert.equal(card._stats.localStorage.count,1);assert.equal(card._stats.serviceWorkers.count,null);assert.equal(card._stats.serviceWorkers.error,denied?'read_failed':undefined);
+  card.hass={language:'en',user:{id:'fixture-household',is_admin:false,is_active:true},connection:{connected:false},states:{}};await card._collectStats();
+  assert.equal(card._stats.localStorage.count,1);assert.match(card.shadowRoot.querySelector('#stat-ls').textContent,/1/);assert.doesNotMatch(card.shadowRoot.textContent,/PRIVATE fixture denial|synthetic/);
  }finally{dom.window.close();}
 });
 test('configuration change clears private stats and action history',async()=>{
