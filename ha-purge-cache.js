@@ -582,10 +582,18 @@ class HAPurgeCache extends HTMLElement {
     this._configSignature = undefined;
     this._authority = undefined;
     this._connection = undefined;
+    this._pendingEffects = new Set();
+    this._pendingStats = new Set();
+    this._operationDeadline = null;
+    this._operationTimedOut = false;
+    this._boundConnection = null;
+    this._connectionBound = false;
+    this._browserBound = false;
+    this._contextEvent = () => this._invalidate();
   }
 
   _confirm(message, onConfirm, keyName = null) {
-    if (!this.isConnected || !this._authorized() || this._operationPromise || this._reloadTimer) return;
+    if (!this.isConnected || !this._authorized() || this._operationPromise || this._pendingEffects.size || this._reloadTimer) return;
     this._confirmToken = this._token();
     const overlay = this.shadowRoot?.querySelector('#confirm-overlay');
     const msgEl = this.shadowRoot?.querySelector('#confirm-msg');
@@ -768,10 +776,12 @@ class HAPurgeCache extends HTMLElement {
     const previousText = this._t;
     if (val?.language) this._lang = val.language.startsWith('pl') ? 'pl' : 'en';
     this._hass = val;
+    this._bindContextEvents();
     if (!this._rendered || authorityChanged && this._authorized()) this._render();
     else if (previousLanguage !== this._lang) this._refreshLocaleLabels(previousText);
     if (!this._authorized()) { this._invalidate(); this.shadowRoot.querySelector('.donate-section')?.remove(); }
     this._refreshActionControls();
+    if (authorityChanged && this.isConnected) this._collectStats();
   }
 
   _refreshLocaleLabels(previousText) {
@@ -809,6 +819,7 @@ class HAPurgeCache extends HTMLElement {
   }
 
   connectedCallback() {
+    this._bindContextEvents();
     this._invalidate();
     if (!this._rendered) this._render();
     this._refreshActionControls();
@@ -816,6 +827,7 @@ class HAPurgeCache extends HTMLElement {
   }
 
   _collectStats() {
+    if (this._pendingStats.size || this._pendingEffects.size) return this._statsPromise || Promise.resolve();
     if (!this.isConnected || !this._authorized() || this._operationPromise) return Promise.resolve();
     if (this._statsPromise) {
       if (this._statsQueued) return this._statsQueued;
@@ -893,7 +905,20 @@ class HAPurgeCache extends HTMLElement {
         if (!this._current(token)) return;
         if (names.length > _PURGE_LIMIT) throw new Error('bounded');
         const cacheDetails = [];
-        for (const name of names) cacheDetails.push({ name, entries: null });
+        for (const name of names) {
+          if (!this._current(token)) return;
+          let entries = null;
+          // Preserve the existing count capability. The optional setting can
+          // disable opening caches; selected purge readback never opens them.
+          if (this._config.inspect_cache_entries !== false && typeof cacheApi.open === 'function') {
+            const cache = await this._bounded(cacheApi.open(name), true);
+            if (!this._current(token)) return;
+            const keys = await this._bounded(cache.keys());
+            if (!this._current(token)) return;
+            if (Array.isArray(keys)) entries = keys.length;
+          }
+          cacheDetails.push({ name, entries });
+        }
         stats.cacheStorage = { count: names.length, caches: cacheDetails };
       }
     } catch (e) { stats.cacheStorage = { count: null, caches: [], error: 'read_failed' }; }
@@ -1058,7 +1083,9 @@ class HAPurgeCache extends HTMLElement {
 
   _authorized() {
     const user = this._hass?.user;
-    return user?.is_admin === true && user.is_active !== false && this._hass?.connection?.connected !== false;
+    // These are this browser's APIs, usable by household members and offline.
+    // There are no privileged HA aggregate reads in Purge Cache.
+    return user?.is_active !== false;
   }
 
   _authoritySignature(hass = this._hass) {
@@ -1066,8 +1093,32 @@ class HAPurgeCache extends HTMLElement {
     try {
       return JSON.stringify([user?.id ?? null, user?.is_admin === true, user?.is_active !== false,
         (user?.groups || []).map(group => typeof group === 'string' ? group : group?.id ?? null).sort(),
+        Array.isArray(user?.group_ids) ? [...user.group_ids].sort() : [], hass?.connection?.connected ?? null,
         hass?.config ?? null, window.location.origin]);
     } catch (_) { return null; }
+  }
+
+  _bindContextEvents() {
+    const connection = this._hass?.connection || null;
+    if (connection !== this._boundConnection) {
+      this._boundConnection?.removeEventListener?.('ready', this._contextEvent);
+      this._boundConnection?.removeEventListener?.('disconnected', this._contextEvent);
+      this._boundConnection = connection; this._connectionBound = false;
+    }
+    if (this.isConnected && connection?.addEventListener && !this._connectionBound) {
+      connection.addEventListener('ready', this._contextEvent);
+      connection.addEventListener('disconnected', this._contextEvent);
+      this._connectionBound = true;
+    }
+    if (this.isConnected && !this._browserBound) {
+      window.addEventListener('online', this._contextEvent);
+      window.addEventListener('offline', this._contextEvent);
+      this._browserBound = true;
+    }
+  }
+
+  _operationExpired() {
+    return this._operationTimedOut || this._operationDeadline !== null && Date.now() >= this._operationDeadline;
   }
 
   _token() {
@@ -1101,17 +1152,26 @@ class HAPurgeCache extends HTMLElement {
   }
 
   _refreshActionControls() {
-    const disabled = !this.isConnected || !this._authorized() || !!this._operationPromise;
+    const disabled = !this.isConnected || !this._authorized() || !!this._operationPromise || this._pendingEffects.size > 0;
     this.shadowRoot?.querySelectorAll('.action-btn, button[data-key]').forEach(button => {
       button.disabled = disabled || (button.id === 'btn-hard-reload' && this._actionResult && this._actionResult.status !== 'success');
     });
   }
 
-  async _bounded(promise) {
+  async _bounded(promise, mayWrite = false) {
+    const raw = Promise.resolve(promise);
+    const pending = this._operationPromise || mayWrite ? this._pendingEffects : this._pendingStats;
+    pending.add(raw);
+    const settled = () => { pending.delete(raw); this._refreshActionControls(); };
+    raw.then(settled, settled);
     let timer;
+    const remaining = this._operationDeadline === null ? 5000 : Math.max(0, Math.min(5000, this._operationDeadline - Date.now()));
     try {
-      return await Promise.race([promise, new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('unconfirmed')), 5000);
+      return await Promise.race([raw, new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          if (this._operationPromise) this._operationTimedOut = true;
+          reject(new Error('unconfirmed'));
+        }, remaining);
       })]);
     } finally { clearTimeout(timer); }
   }
@@ -1125,6 +1185,7 @@ class HAPurgeCache extends HTMLElement {
 
   async _snapshot(store, key, token) {
     if (!this._current(token)) return null;
+    if (this._operationExpired()) throw new Error('unconfirmed');
     if (store === 'localStorage' || store === 'sessionStorage') {
       const api = window[store];
       if (key != null) {
@@ -1175,8 +1236,14 @@ class HAPurgeCache extends HTMLElement {
     row.reason = null;
     if (store === 'cacheStorage') row.entries = { before: null, after: null, reason: 'not_measured' };
     const outcomes = new Map();
+    const uncertain = () => {
+      row.after = null; row.removed = null; row.failed = null;
+      row.unknown = before.names.length; row.status = 'unconfirmed'; row.reason = 'pending_effect';
+      return row;
+    };
     for (let index = 0; index < before.names.length; index++) {
       if (!this._current(token)) return null;
+      if (this._operationExpired()) return uncertain();
       const name = before.names[index];
       // UI-owned dismissal persistence cannot be deleted via a direct per-key call either.
       if (store === 'localStorage' && _PURGE_EXCLUSIONS.has(name)) {
@@ -1197,6 +1264,7 @@ class HAPurgeCache extends HTMLElement {
         if (!this._current(token)) return null;
         // A rejection/timeout may follow an unknown side effect. Readback decides below.
         outcomes.set(name, 'not_acknowledged');
+        if (this._operationExpired() || this._pendingEffects.size) return uncertain();
       }
     }
     let after;
@@ -1268,6 +1336,7 @@ class HAPurgeCache extends HTMLElement {
       this._fetchController = new AbortController();
       for (const value of urls) {
         if (!this._current(token)) return null;
+        if (this._operationExpired()) break;
         const url = new URL(value, window.location.href);
         url.searchParams.set('_force', Date.now());
         try {
@@ -1329,6 +1398,8 @@ class HAPurgeCache extends HTMLElement {
   _runSelected(action, stores, key = null) {
     if (!this.isConnected || !this._authorized()) return Promise.resolve(null);
     if (this._operationPromise) return this._operationPromise;
+    if (this._pendingEffects.size) return Promise.resolve(this._actionResult);
+    this._operationTimedOut = false; this._operationDeadline = Date.now() + 15000;
     this._epoch++; // In-flight overview reads cannot overwrite the action's newer evidence.
     const token = this._token();
     this._closeConfirm(false);
@@ -1339,6 +1410,7 @@ class HAPurgeCache extends HTMLElement {
       const components = [];
       for (const store of stores) {
         if (!this._current(token)) return null;
+        if (this._operationExpired()) { components.push(this._emptyComponent(store)); continue; }
         const row = store === 'toolScripts' ? await this._refetchScripts(token) : await this._produce(store, key, token);
         if (!row || !this._current(token)) return null;
         components.push(row);
@@ -1365,7 +1437,7 @@ class HAPurgeCache extends HTMLElement {
       this._addLog(this._lang === 'pl' ? 'Nie można potwierdzić wyniku.' : 'Result could not be confirmed.', 'error');
       return this._actionResult;
     }).finally(() => {
-      if (this._operationPromise === operation) this._operationPromise = null;
+      if (this._operationPromise === operation) { this._operationPromise = null; this._operationDeadline = null; }
       this._refreshActionControls();
     });
     this._operationPromise = operation;
@@ -1407,7 +1479,7 @@ class HAPurgeCache extends HTMLElement {
 
   _hardReload(reviewed = false) {
     if (reviewed !== true) return;
-    if (!this.isConnected || !this._authorized() || this._operationPromise || this._reloadTimer ||
+    if (!this.isConnected || !this._authorized() || this._operationPromise || this._pendingEffects.size || this._reloadTimer ||
         this._actionResult && this._actionResult.status !== 'success') return;
     const token = this._token();
     this._actionResult = { action: 'hardReload', status: 'unconfirmed', components: [], epoch: token.epoch,
@@ -2037,7 +2109,15 @@ ${createUiV3({ language: this._lang }).css}
     this._refreshActionControls();
   }
 
-  disconnectedCallback() { this._invalidate(); }
+  disconnectedCallback() {
+    this._invalidate();
+    this._boundConnection?.removeEventListener?.('ready', this._contextEvent);
+    this._boundConnection?.removeEventListener?.('disconnected', this._contextEvent);
+    this._connectionBound = false; this._boundConnection = null;
+    window.removeEventListener('online', this._contextEvent);
+    window.removeEventListener('offline', this._contextEvent);
+    this._browserBound = false;
+  }
 
 }
 
@@ -2056,6 +2136,7 @@ class HaPurgeCacheEditor extends HTMLElement {
     this._config = { ...config };
     this._render();
   }
+  set hass(hass) { this._lang = String(hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en'; this._render(); }
   _dispatch() {
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this._config }, bubbles: true, composed: true }));
   }
@@ -2073,7 +2154,10 @@ class HaPurgeCacheEditor extends HTMLElement {
               <input type="text" id="cf_title" value="${_esc(this._config?.title || 'Purge Cache')}"
                 style="width:100%;padding:8px 12px;border:1px solid var(--divider-color,#e2e8f0);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#1e293b);font-size:14px;box-sizing:border-box;">
             </div>
+      <label style="display:flex;gap:8px;align-items:center;min-height:44px;font-size:13px"><input id="cf_inspect_cache_entries" type="checkbox" style="width:44px;height:44px" ${this._config.inspect_cache_entries !== false ? 'checked' : ''}>${this._lang === 'pl' ? 'Sprawdzaj liczbę wpisów w cache' : 'Inspect cache entry counts'}</label>
+      <p style="font-size:12px;line-height:1.5">${this._lang === 'pl' ? 'Kontrola otwiera istniejące cache. Cache usunięty równolegle może zostać utworzony ponownie. Wyłącz, aby odczytywać wyłącznie liczbę cache.' : 'Inspection opens existing caches. A cache deleted concurrently may be created again. Turn off to read cache counts only.'}</p>
     `;
+        this.shadowRoot.querySelector('#cf_inspect_cache_entries').addEventListener('change', event => { this._config = {...this._config, inspect_cache_entries:event.target.checked}; this._dispatch(); });
         const f_title = this.shadowRoot.querySelector('#cf_title');
         if (f_title) f_title.addEventListener('input', (e) => {
           this._config = { ...this._config, title: e.target.value };
