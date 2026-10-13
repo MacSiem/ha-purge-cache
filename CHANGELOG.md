@@ -10,7 +10,7 @@
 - Capture bounded exact keys and preserve Purge Cache's dismissal preferences. Keep values out of action results and stop remaining work when the account, connection or card context changes.
 - Leave results visible after cleanup. Hard Reload now requires its own confirmation and stays blocked while the selected result is incomplete or unconfirmed. Cache-only still preserves localStorage and sessionStorage.
 - Add an editor option to disable cache-entry inspection. Deletion results never reopen caches; script refetch reports downloaded files without claiming execution or HTTP-cache deletion.
-- Use shared Polish/English result labels, larger touch controls and visible keyboard focus. Preserve editor selection and unknown configuration fields during Home Assistant updates.
+- Use shared Polish/English result labels, larger touch controls and visible keyboard focus. Keep action timestamps readable in both themes and wrap storage labels at word boundaries. Preserve editor selection and unknown configuration fields during Home Assistant updates.
 
 ## 4.1.15 (2026-10-06)
 

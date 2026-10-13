@@ -1965,7 +1965,7 @@ ${createUiV3({ language: this._lang }).css}
                 <div class="stat-value" id="stat-ls">\u2022\u2022\u2022</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label">sessionStorage</div>
+                <div class="stat-label">session<wbr>Storage</div>
                 <div class="stat-value" id="stat-ss">\u2022\u2022\u2022</div>
               </div>
               <div class="stat-card">
