@@ -51,11 +51,11 @@ changes HA server configuration, automations or history.
 
 | Light | Dark |
 |---|---|
-| ![Main view, light theme](docs/screenshots/card-main-light.jpg) | ![Main view, dark theme](docs/screenshots/card-main-dark.jpg) |
+| ![Main view, light theme](docs/screenshots/card-main-light.png) | ![Main view, dark theme](docs/screenshots/card-main-dark.png) |
 
-*Synthetic browser storage stats, the localStorage key browser, separate
-cache-only action and explicit warning before deleting saved tool data. Dark
-mode follows your Home Assistant theme.*
+*Version 4.2.0 with synthetic browser data: cache-only cleanup removes two caches
+and one worker registration while keeping saved keys. Its measured result stays
+visible for review. Dark mode follows your Home Assistant theme.*
 
 ## Installation
 
