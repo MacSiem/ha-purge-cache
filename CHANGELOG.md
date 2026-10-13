@@ -1,5 +1,14 @@
 # Changelog — Purge Cache
 
+## 4.2.0 (2026-10-13)
+
+- Show a persistent result for the selected action: before/after counts, confirmed removals, failures, unknown outcomes and removed key/cache names. Keep storage units separate and leave unselected areas explicitly unchecked.
+- Require deletion acknowledgement and independent readback before reporting success. Keep API denial, missing APIs, concurrent new entries and incomplete results distinct from an empty store.
+- Capture bounded exact keys and preserve Purge Cache's dismissal preferences. Keep values out of action results and stop remaining work when the account, connection or card context changes.
+- Leave results visible after cleanup. Hard Reload now requires its own confirmation and stays blocked while the selected result is incomplete or unconfirmed. Cache-only still preserves localStorage and sessionStorage.
+- Add an editor option to disable cache-entry inspection. Deletion results never reopen caches; script refetch reports downloaded files without claiming execution or HTTP-cache deletion.
+- Use shared Polish/English result labels, larger touch controls and visible keyboard focus. Preserve editor selection and unknown configuration fields during Home Assistant updates.
+
 ## 4.1.15 (2026-10-06)
 
 - Add Clear caches only: unregister Service Workers and delete Cache Storage while preserving login and all localStorage/sessionStorage data.

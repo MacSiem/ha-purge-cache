@@ -2,37 +2,50 @@
 
 ![Preview](banner.png)
 
-Fix "my dashboard won't update" in one click: inspect and clear browser
-localStorage, sessionStorage, Service Workers and Cache Storage, and
-refetch detected HA Tools scripts — from a Lovelace card.
+Inspect and clear this browser's storage from a Home Assistant card. Choose a
+storage area, review what was actually removed, and decide when to reload.
 
 [![Version](https://img.shields.io/github/v/release/MacSiem/ha-purge-cache)](https://github.com/MacSiem/ha-purge-cache/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## How it works
 
-**Short version: it works automatically.** The card needs no configuration:
+1. **Inspect browser storage.** See localStorage and sessionStorage key counts,
+   Service Worker registrations and Cache Storage. Expand the localStorage list
+   to inspect key names and estimated sizes or delete one selected key.
+2. **Choose the scope.** Each storage area has its own action. **Clear caches
+   only** removes Service Worker registrations and Cache Storage while retaining
+   login and localStorage/sessionStorage data. **Clear EVERYTHING** also removes
+   localStorage and sessionStorage and refetches detected tool scripts.
+3. **Review the result.** Each selected area reports before, after, confirmed
+   removals, failures and unknown outcomes in its own units. Removed key/cache
+   names stay in the current card session; values are not included. Unselected
+   areas are explicitly marked as not checked.
+4. **Reload when ready.** Cleanup leaves its result visible. **Hard Reload** is a
+   separate confirmed action. An incomplete or unconfirmed selected action
+   blocks that button so a reload cannot hide its result.
 
-1. **Live browser stats.** On load it counts localStorage keys (with sizes),
-   sessionStorage, registered Service Workers and Cache Storage entries for
-   your HA frontend — and lists every localStorage key with a per-key delete
-   button.
-2. **Targeted or full cleanup.** Each storage type has its own button with a
-   clear warning about what you lose. **Clear caches only** removes Service
-   Workers and Cache Storage, then reloads the page while retaining login and
-   locally saved tool data. **Clear EVERYTHING** also removes localStorage and
-   sessionStorage, then reloads the page.
-3. **Everything is browser-local.** The card never touches your HA server
-   config — it only clears *this browser's* cached state.
+Success requires both the deletion acknowledgement and an independent readback.
+Partial results, failures and unknown outcomes remain distinct. Missing or denied
+browser APIs are unavailable, never a measured zero. A new entry created during
+cleanup is reported separately. The normal HTTP cache remains unconfirmed:
+browser JavaScript cannot verify that it was cleared.
 
-### What is automatic vs. manual
+Cleanup captures at most 512 entries per storage area, with identifiers up to
+2,048 characters. If a reliable bounded snapshot cannot be read, that area is not
+mutated and its outcome stays unknown. Purge Cache's two instruction/support
+dismissal preferences are preserved and counted as excluded when observed.
 
-| Automatic | Manual |
-|---|---|
-| Counting storage / SW / cache stats | Choosing what to clear |
-| Size per localStorage key | Confirming each destructive action |
-| Reload after "Clear caches only" or "Clear EVERYTHING" | — |
+Actions that delete saved local/session data, individual keys, or one selected
+worker/cache area ask for confirmation. **Clear caches only** acts directly on
+cache APIs and preserves saved local/session data. Confirmation starts on Cancel;
+Escape cancels, and Tab, Enter and Space work from the keyboard. Cleanup never
+runs merely because the card is opened or updated.
 
-If an action fails, the report stays visible and the card does not automatically reload. Retry after resolving the browser restriction, or reload manually. Unavailable APIs and denied reads are reported separately from measured empty storage.
+All operations use the current browser and Home Assistant origin. Household
+members can maintain their own browser storage, including while HA is offline.
+Changing the active account, connection or card configuration discards private
+results and prevents remaining steps of an old request from continuing. Nothing
+changes HA server configuration, automations or history.
 
 ## Screenshots
 
@@ -63,9 +76,25 @@ No options are required. Optional configuration:
 type: custom:ha-purge-cache
 title: Browser maintenance
 show_support: false
+inspect_cache_entries: false
 ```
 
+`inspect_cache_entries` defaults to `true` and counts entries by opening existing caches. A cache removed concurrently can be recreated by that inspection. Set it to `false` to read cache counts only. Deletion results never open caches to count their entries. This option is also available in the visual editor.
+
 `title` is shown literally and wraps within the card. `show_support: false` hides the optional administrator-only support link. You can also dismiss the instructions and support link in the card; dismissal persists when browser storage is available.
+
+## Updating from 4.1.x
+
+Update through HACS and reload the frontend so it loads the new JavaScript. The
+card type, title and support settings are unchanged; there is no server-side
+migration. Browser data is preserved by the update itself. The main behavior
+change is that cleanup leaves a measured result on screen instead of reloading
+automatically. Review it, then use the separate Hard Reload action if needed.
+
+Purge Cache keeps only its dismissal preferences in localStorage. Action results
+and their key names are held in memory and disappear on reload or context change.
+Export important records from the tool that owns them before choosing a broader
+storage deletion. Rolling back the card version cannot restore deleted data.
 
 ## FAQ
 
