@@ -2,6 +2,9 @@
 
 ## 4.2.0 (2026-10-13)
 
+- Filter and deduplicate eligible HACS scripts before applying the refetch bound. Confirm completed response bodies even when Resource Timing stops recording; show No data for empty discovery.
+- Keep reviewed-reload confirmations and selected-scope labels in the current language without moving keyboard focus.
+
 - Show a persistent result for the selected action: before/after counts, confirmed removals, failures, unknown outcomes and removed key/cache names. Keep storage units separate and leave unselected areas explicitly unchecked.
 - Require deletion acknowledgement and independent readback before reporting success. Keep API denial, missing APIs, concurrent new entries and incomplete results distinct from an empty store.
 - Capture bounded exact keys and preserve Purge Cache's dismissal preferences. Keep values out of action results and stop remaining work when the account, connection or card context changes.
