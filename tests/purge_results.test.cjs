@@ -239,11 +239,11 @@ test('locale refresh preserves confirmation and editor changes preserve unknown 
  } finally { f.dom.window.close(); }
 });
 
-// Break caught: a response acknowledgement without completed body/resource readback is not Success.
-test('script refetch acknowledgement without readback stays unconfirmed', async () => {
+// Break caught: headers alone without a readable completed body cannot produce Success.
+test('script refetch acknowledgement without readable body stays unconfirmed', async () => {
  const f = await setup(); try {
   Object.defineProperty(f.w.performance, 'getEntriesByType', { value: () => [{ name: 'http://localhost/hacsfiles/tool/tool.js' }] });
-  f.w.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) });
+  f.w.fetch = async () => ({ ok: true });
   await f.card._forceReloadTools(); const row = selected(f.card, 'toolScripts');
   assert.equal(row.refetched, 0); assert.equal(row.unknown, 1); assert.equal(row.status, 'unconfirmed');
   assert.equal(f.root.querySelector('#btn-hard-reload').disabled, true); assert.equal(f.card._reloadTimer, null);
@@ -295,4 +295,80 @@ test('deadline keeps an unsettled deletion occupied and never issues another mut
  const first=f.card._purgeCacheStorage();await new Promise(r=>setTimeout(r,15));const second=f.card._purgeCacheStorage();await tick();assert.equal(deletes,1);assert.equal(f.root.querySelector('#btn-purge-cs').disabled,true);
  for(const release of releases)release();await Promise.all([first,second]);await tick();assert.notEqual(f.card._actionResult.status,'success');assert.equal(deletes,1);
  }finally{for(const release of releases)release();f.dom.window.close();}
+});
+
+
+// Release review: unrelated resources and duplicate observations do not exhaust
+// the selected script bound; Resource Timing may stop recording new fetches.
+test('refetch filters before bounding and confirms complete bodies with frozen timing', async () => {
+ const f = await setup(); try {
+  const script = 'http://localhost/hacsfiles/tool/tool.js?v=7';
+  const resources = Array.from({ length: 900 }, (_, i) => ({ name: `http://localhost/image-${i}.png` }));
+  resources.push(...Array.from({ length: 600 }, () => ({ name: script })));
+  Object.defineProperty(f.w.performance, 'getEntriesByType', { value: () => resources });
+  let fetched = 0, consumed = 0;
+  f.w.fetch = async (url, options) => { fetched++; assert.equal(new URL(url).searchParams.get('v'), '7'); assert.equal(options.cache, 'no-store'); return { ok: true, arrayBuffer: async () => { consumed++; return new ArrayBuffer(3); } }; };
+  await f.card._forceReloadTools(); const row = selected(f.card, 'toolScripts');
+  assert.equal(fetched, 1); assert.equal(consumed, 1); assert.equal(row.before, 1);
+  assert.equal(row.refetched, 1); assert.equal(row.status, 'success');
+  assert.equal(f.card._actionResult.httpCache.status, 'unconfirmed'); assert.equal(f.card._reloadTimer, null);
+ } finally { f.dom.window.close(); }
+});
+
+test('513 distinct eligible scripts are rejected before any fetch', async () => {
+ const f = await setup(); try {
+  Object.defineProperty(f.w.performance, 'getEntriesByType', { value: () => Array.from({ length: 513 }, (_, i) => ({ name: `http://localhost/hacsfiles/tool/${i}.js` })) });
+  let fetched = 0; f.w.fetch = async () => { fetched++; throw Error('must not fetch'); };
+  await f.card._forceReloadTools(); const row = selected(f.card, 'toolScripts');
+  assert.equal(fetched, 0); assert.equal(row.before, null); assert.equal(row.status, 'unconfirmed');
+ } finally { f.dom.window.close(); }
+});
+
+for (const mode of ['partial', 'oversized', 'deadline', 'context']) test(`refetch body ${mode} cannot produce false Success`, async () => {
+ const f = await setup(); try {
+  Object.defineProperty(f.w.performance, 'getEntriesByType', { value: () => [{ name: 'http://localhost/hacsfiles/tool/tool.js' }] });
+  let reads = 0, cancelled = 0, signal;
+  f.w.fetch = async (_url, options) => { signal = options.signal; return { ok: true, body: { getReader() { return {
+   async read() {
+    reads++;
+    if (mode === 'partial') { if (reads > 1) throw Error('body interrupted'); return { done: false, value: new Uint8Array(4) }; }
+    if (mode === 'oversized') return { done: false, value: new Uint8Array(8 * 1024 * 1024 + 1) };
+    if (mode === 'deadline') { f.card._operationTimedOut = true; throw Error('deadline body'); }
+    f.card.hass = { ...f.card._hass, user: { ...admin(), id: 'other-account' } }; return { done: true };
+   }, async cancel() { cancelled++; }
+  }; } } }; };
+  await f.card._forceReloadTools();
+  assert.equal(cancelled, 1); assert.equal(signal.aborted, true); assert.equal(f.card._reloadTimer, null);
+  if (mode === 'context') assert.equal(f.card._actionResult, null);
+  else { const row = selected(f.card, 'toolScripts'); assert.equal(row.refetched, 0); assert.equal(row.unknown, 1); assert.equal(row.status, 'unconfirmed'); }
+ } finally { f.dom.window.close(); }
+});
+
+test('reviewed reload dialog and selected scope translate both ways without losing focus', async () => {
+ const f = await setup(); try {
+  f.w.localStorage.setItem('one', 'value');
+  await f.card._runSelected('deleteKey', ['localStorage'], 'one');
+  const scope = f.root.querySelector('#stat-ls');
+  const reload = f.root.querySelector('#btn-hard-reload'); reload.focus(); reload.click();
+  const cancel = f.root.querySelector('#confirm-cancel'); const callback = f.card._pendingConfirm;
+  assert.equal(f.root.activeElement, cancel);
+  for (const language of ['pl', 'en']) {
+   f.card.hass = { ...f.card._hass, language };
+   assert.equal(f.root.activeElement, cancel); assert.equal(f.card._pendingConfirm, callback);
+   assert.equal(f.root.querySelector('#confirm-msg').textContent, f.card._reviewedReloadMessage());
+   assert.equal(scope.textContent, language === 'pl' ? 'Wybrany zakres: wynik poniżej' : 'Selected scope: result below');
+  }
+  cancel.click(); assert.equal(f.root.activeElement, reload); assert.equal(f.card._reloadTimer, null);
+ } finally { f.dom.window.close(); }
+});
+
+// An empty discovery must not claim a script was refreshed.
+test('no eligible script is No data, never Success', async () => {
+ const f = await setup(); try {
+  Object.defineProperty(f.w.performance, 'getEntriesByType', { value: () => [{ name: 'http://localhost/image.png' }] });
+  let fetched = 0; f.w.fetch = async () => { fetched++; throw Error('unexpected'); };
+  await f.card._forceReloadTools(); const row = selected(f.card, 'toolScripts');
+  assert.equal(fetched, 0); assert.equal(row.before, 0); assert.equal(row.refetched, 0); assert.equal(row.status, 'no_data');
+  assert.equal(f.card._actionResult.status, 'no_data'); assert.match(f.root.querySelector('#purge-result').textContent, /No data/);
+ } finally { f.dom.window.close(); }
 });
