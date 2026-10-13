@@ -602,6 +602,7 @@ class HAPurgeCache extends HTMLElement {
     overlay.style.display = 'flex';
     this._pendingConfirm = onConfirm;
     this._confirmKeyName = keyName;
+    this._confirmReviewedReload = message === this._reviewedReloadMessage();
     this._confirmOrigin = this.shadowRoot.activeElement;
     this.shadowRoot.querySelector('#confirm-cancel').focus();
   }
@@ -613,10 +614,15 @@ class HAPurgeCache extends HTMLElement {
     this._pendingConfirm = null;
     this._confirmToken = null;
     this._confirmKeyName = null;
+    this._confirmReviewedReload = false;
     this._confirmOrigin = null;
     const message = this.shadowRoot?.querySelector('#confirm-msg');
     if (message) message.textContent = '';
     if (restoreFocus && origin?.isConnected && !origin.disabled) origin.focus();
+  }
+
+  _reviewedReloadMessage() {
+    return `${this._t.confirmHardReload}\n\n${this._lang === 'pl' ? 'Potwierdzam, że przejrzałem wynik wybranej akcji.' : 'I confirm that I reviewed the selected action result.'}`;
   }
 
   get _t() {
@@ -814,6 +820,8 @@ class HAPurgeCache extends HTMLElement {
     const key = ["confirmLS", "confirmSS", "confirmSW", "confirmCS", "confirmAll", "confirmHardReload"]
       .find(key => message.textContent === previousText[key]);
     if (key) message.textContent = t[key];
+    if (this._confirmReviewedReload) message.textContent = this._reviewedReloadMessage();
+    root.querySelectorAll("[data-selected-scope]").forEach(node => { node.textContent = polish ? "Wybrany zakres: wynik poniżej" : "Selected scope: result below"; });
     if (this._confirmKeyName != null) message.textContent = t.confirmKey(this._confirmKeyName);
     this._renderResult();
   }
@@ -1320,18 +1328,30 @@ class HAPurgeCache extends HTMLElement {
     const row = this._emptyComponent('toolScripts');
     row.reason = 'refetch_unavailable';
     try {
-      const observed = [...Array.from(document.head.querySelectorAll('script[src]'), tag => tag.src),
-        ...(typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource').map(entry => entry.name) : [])];
-      if (observed.length > _PURGE_LIMIT) return row;
-      const urls = [...new Set(observed.map(value => {
+      // Bound selected work, not unrelated HA resources. Yield during discovery so
+      // the context/deadline can still invalidate a large host resource list.
+      const candidates = new Set();
+      const resources = typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource') : [];
+      function* observed() {
+        for (const tag of document.head.querySelectorAll('script[src]')) yield tag.src;
+        for (const entry of resources) yield entry.name;
+      }
+      let inspected = 0;
+      for (const value of observed()) {
+        if (++inspected % 128 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+        if (!this._current(token)) return null;
+        if (this._operationExpired()) return row;
         try {
           const url = new URL(value, window.location.href);
-          if (url.origin !== window.location.origin || !/^\/(?:local\/community|hacsfiles)\/.+\.js$/.test(url.pathname)) return null;
+          if (url.origin !== window.location.origin || !/^\/(?:local\/community|hacsfiles)\/.+\.js$/.test(url.pathname)) continue;
           url.searchParams.delete('_force');
-          return url.toString();
-        } catch (_) { return null; }
-      }).filter(Boolean))];
+          candidates.add(url.toString());
+          if (candidates.size > _PURGE_LIMIT) return row;
+        } catch (_) { /* Ignore resources that are not usable script URLs. */ }
+      }
+      const urls = [...candidates];
       row.before = urls.length; row.after = null; row.refetched = 0; row.failed = 0; row.unknown = 0;
+      if (!urls.length) { row.after = 0; row.status = 'no_data'; row.reason = 'no_scripts_found'; return row; }
       const completed = [];
       this._fetchController = new AbortController();
       for (const value of urls) {
@@ -1345,6 +1365,7 @@ class HAPurgeCache extends HTMLElement {
           if (response.ok === true) {
             await this._bounded(this._consumeRefetch(response));
             if (!this._current(token)) return null;
+            if (this._operationExpired()) break;
             completed.push(url.toString());
           } else row.failed++;
         } catch (_) {
@@ -1354,14 +1375,13 @@ class HAPurgeCache extends HTMLElement {
         }
       }
       if (!this._current(token)) return null;
-      // Resource timing is an independent readback of the exact requested URLs.
-      // A response ACK alone, missing timing, or incomplete body cannot turn green.
-      const resources = typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource') : null;
-      if (Array.isArray(resources) && resources.length <= _PURGE_LIMIT * 2) {
-        const names = new Set(resources.map(entry => entry.name));
-        row.refetched = completed.filter(url => names.has(url)).length;
-        row.after = row.refetched;
-      }
+      // Fetch resolves on response headers; fully consuming the body is a
+      // separate completion check. Refetch has no persistent deletion effect to
+      // read back: this confirms downloaded bytes, never execution or HTTP purge.
+      // Resource Timing is discovery only, so a full/disabled global buffer cannot
+      // hide a completed body. Rejection, partial body and deadline stay unknown.
+      row.refetched = completed.length;
+      row.after = row.refetched;
       row.unknown = urls.length - row.refetched - row.failed;
       row.status = row.failed === 0 && row.unknown === 0 ? 'success' : row.refetched > 0 ? 'partial' : row.failed > 0 ? 'error' : 'unconfirmed';
       row.reason = row.status === 'success' ? 'refetched_not_executed' : 'refetch_incomplete';
@@ -1375,8 +1395,10 @@ class HAPurgeCache extends HTMLElement {
     const node = this.shadowRoot.querySelector('#' + ids[row.store]);
     if (!node) return;
     const t = this._t;
+    node.removeAttribute('data-selected-scope');
     if (key != null || row.store === 'toolScripts') {
       // Exact-key and script-refetch scopes cannot infer the whole-store/registry statistic.
+      node.setAttribute('data-selected-scope', '');
       node.textContent = this._lang === 'pl' ? 'Wybrany zakres: wynik poniżej' : 'Selected scope: result below';
       return;
     }
@@ -1417,7 +1439,7 @@ class HAPurgeCache extends HTMLElement {
       }
       if (!this._current(token)) return null;
       const allSuccess = components.every(row => row.status === 'success');
-      const status = allSuccess ? 'success' : components.some(row => row.status === 'success' || row.status === 'partial') ? 'partial' : components.some(row => row.status === 'error') ? 'error' : 'unconfirmed';
+      const status = allSuccess ? 'success' : components.every(row => row.status === 'no_data') ? 'no_data' : components.some(row => row.status === 'success' || row.status === 'partial') ? 'partial' : components.some(row => row.status === 'error') ? 'error' : 'unconfirmed';
       this._actionResult = { action, status, components, epoch: token.epoch,
         httpCache: { status: 'unconfirmed', before: null, after: null, removed: null, reason: 'not_verifiable_by_browser_js' } };
       for (const row of components) this._applySelectedReadback(row, key);
@@ -2096,7 +2118,7 @@ ${createUiV3({ language: this._lang }).css}
     this.shadowRoot.querySelector('#btn-reload-tools').addEventListener('click', () => this._forceReloadTools());
     this.shadowRoot.querySelector('#btn-purge-all').addEventListener('click', () => this._confirm(this._t.confirmAll, () => this._purgeAll()));
     this.shadowRoot.querySelector('#btn-purge-caches').addEventListener('click', () => this._purgeCachesOnly());
-    this.shadowRoot.querySelector('#btn-hard-reload').addEventListener('click', () => this._confirm(this._actionResult ? `${this._t.confirmHardReload}\n\n${this._lang === 'pl' ? 'Potwierdzam, że przejrzałem wynik wybranej akcji.' : 'I confirm that I reviewed the selected action result.'}` : this._t.confirmHardReload, () => this._hardReload(true)));
+    this.shadowRoot.querySelector('#btn-hard-reload').addEventListener('click', () => this._confirm(this._actionResult ? this._reviewedReloadMessage() : this._t.confirmHardReload, () => this._hardReload(true)));
 
     // Toggle LS keys
     const toggle = this.shadowRoot.querySelector('#keys-toggle');
