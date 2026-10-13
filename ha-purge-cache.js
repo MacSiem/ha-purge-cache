@@ -1713,7 +1713,7 @@ ${createUiV3({ language: this._lang }).css}
         .action-btn.danger:hover { border-color: var(--bento-error); background: rgba(239, 68, 68, 0.04); }
 
         .action-btn.primary { border-color: var(--bento-primary); background: rgba(59, 130, 246, 0.06); }
-        .action-btn.primary:hover { background: var(--bento-primary); color: white; }
+        .action-btn.primary:hover { background: var(--bento-bg); color: var(--bento-text); box-shadow: 0 0 0 1px var(--bento-primary); }
 
         /* Log */
         .log-section {
