@@ -1162,7 +1162,7 @@ class HAPurgeCache extends HTMLElement {
   _refreshActionControls() {
     const disabled = !this.isConnected || !this._authorized() || !!this._operationPromise || this._pendingEffects.size > 0;
     this.shadowRoot?.querySelectorAll('.action-btn, button[data-key]').forEach(button => {
-      button.disabled = disabled || (button.id === 'btn-hard-reload' && this._actionResult && this._actionResult.status !== 'success');
+      button.disabled = disabled || (button.id === 'btn-hard-reload' && this._actionResult && !['success', 'no_data'].includes(this._actionResult.status));
     });
   }
 
@@ -1444,7 +1444,8 @@ class HAPurgeCache extends HTMLElement {
         httpCache: { status: 'unconfirmed', before: null, after: null, removed: null, reason: 'not_verifiable_by_browser_js' } };
       for (const row of components) this._applySelectedReadback(row, key);
       this._renderResult();
-      this._addLog(allSuccess ? (this._lang === 'pl' ? 'Wynik akcji jest gotowy do przeglądu.' : 'Action result is ready for review.') : (this._lang === 'pl' ? 'Błąd akcji: wynik niedostępny lub niepełny.' : 'Action error: result unavailable or incomplete.'), allSuccess ? 'info' : 'error');
+      const resultReady = allSuccess || status === 'no_data';
+      this._addLog(resultReady ? (this._lang === 'pl' ? 'Wynik akcji jest gotowy do przeglądu.' : 'Action result is ready for review.') : (this._lang === 'pl' ? 'Błąd akcji: wynik niedostępny lub niepełny.' : 'Action error: result unavailable or incomplete.'), resultReady ? 'info' : 'error');
       if (key != null) {
         const button = [...this.shadowRoot.querySelectorAll('button[data-key]')].find(node => node.dataset.key === key);
         if (components[0]?.removed === 1) button?.closest('.key-row')?.remove();
@@ -1491,18 +1492,19 @@ class HAPurgeCache extends HTMLElement {
       return `<section class="purge-component"><h4>${this._esc(row.store)} · ${labels[row.unit]}</h4>${ui.statusHtml(row.status)}<dl>${fields.map(field => `<div><dt>${labels[field]}</dt><dd>${count(row[field])}</dd></div>`).join('')}</dl>` +
         (row.removedNames.length ? `<p>${labels.removed}: ${row.removedNames.map(name => `<code>${this._esc(name)}</code>`).join(', ')}</p>` : '') +
         (row.failedNames.length ? `<p>${labels.failed}: ${row.failedNames.map(name => `<code>${this._esc(name)}</code>`).join(', ')}</p>` : '') +
+        (row.status === 'no_data' ? `<p>${pl ? 'Nie znaleziono pasujących skryptów HACS. Niczego nie pobrano.' : 'No eligible HACS scripts were found. Nothing was fetched.'}</p>` : '') +
         (row.store === 'toolScripts' ? `<p>${pl ? 'Pobranie nie oznacza wykonania skryptów.' : 'Refetch does not execute scripts.'}</p>` : '') +
         (row.store === 'serviceWorkers' ? `<p>${pl ? 'Usunięcie rejestracji nie kończy kontroli aktywnej strony; po przeglądzie wyniku potwierdź przeładowanie.' : 'Unregistration does not stop control of the active page; review the result before confirming reload.'}</p>` : '') +
         (row.store === 'cacheStorage' ? `<p>${pl ? 'Liczba wpisów cache: nieznana (nie odczytano).' : 'Cache entry counts: unknown (not read).'}</p>` : '') +
         (row.newEntries ? `<p>${pl ? 'Nowe wpisy po akcji' : 'New entries after action'}: ${row.newEntries}</p>` : '') + '</section>';
-    }).join('') + `<p>${pl ? 'Pozostałe magazyny: nie wybrano, nie sprawdzono.' : 'Other stores: not selected, not checked.'}</p><p>${ui.statusHtml('unconfirmed')} ${pl ? 'Cache HTTP: nieznany; JavaScript przeglądarki nie może potwierdzić usunięcia.' : 'HTTP cache: unknown; browser JavaScript cannot verify deletion.'}</p><p>${this._actionResult.status === 'success' ? (pl ? 'Przejrzyj wynik, następnie osobno potwierdź Hard Reload.' : 'Review this result, then confirm Hard Reload separately.') : (pl ? 'Niepełny wynik pozostaje widoczny. Przeładowanie jest zablokowane do pomyślnego zakończenia wybranej akcji.' : 'Incomplete result remains visible. Reload is blocked until the selected action succeeds.')}</p>`;
+    }).join('') + `<p>${pl ? 'Pozostałe magazyny: nie wybrano, nie sprawdzono.' : 'Other stores: not selected, not checked.'}</p><p>${ui.statusHtml('unconfirmed')} ${pl ? 'Cache HTTP: nieznany; JavaScript przeglądarki nie może potwierdzić usunięcia.' : 'HTTP cache: unknown; browser JavaScript cannot verify deletion.'}</p><p>${['success', 'no_data'].includes(this._actionResult.status) ? (pl ? 'Przejrzyj wynik, następnie osobno potwierdź Hard Reload.' : 'Review this result, then confirm Hard Reload separately.') : (pl ? 'Niepełny wynik pozostaje widoczny. Przeładowanie jest zablokowane do pomyślnego zakończenia wybranej akcji.' : 'Incomplete result remains visible. Reload is blocked until the selected action succeeds.')}</p>`;
     this._refreshActionControls();
   }
 
   _hardReload(reviewed = false) {
     if (reviewed !== true) return;
     if (!this.isConnected || !this._authorized() || this._operationPromise || this._pendingEffects.size || this._reloadTimer ||
-        this._actionResult && this._actionResult.status !== 'success') return;
+        this._actionResult && !['success', 'no_data'].includes(this._actionResult.status)) return;
     const token = this._token();
     this._actionResult = { action: 'hardReload', status: 'unconfirmed', components: [], epoch: token.epoch,
       httpCache: { status: 'unconfirmed', before: null, after: null, removed: null, reason: 'not_verifiable_by_browser_js' } };

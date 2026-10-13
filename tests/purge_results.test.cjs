@@ -370,5 +370,9 @@ test('no eligible script is No data, never Success', async () => {
   await f.card._forceReloadTools(); const row = selected(f.card, 'toolScripts');
   assert.equal(fetched, 0); assert.equal(row.before, 0); assert.equal(row.refetched, 0); assert.equal(row.status, 'no_data');
   assert.equal(f.card._actionResult.status, 'no_data'); assert.match(f.root.querySelector('#purge-result').textContent, /No data/);
+  assert.equal(f.root.querySelector('#btn-hard-reload').disabled, false);
+  assert.doesNotMatch(f.root.textContent, /Action error:/);
+  f.root.querySelector('#btn-hard-reload').click(); assert.match(f.root.querySelector('#confirm-msg').textContent, /reviewed/);
+  f.root.querySelector('#confirm-cancel').click(); assert.equal(f.card._reloadTimer, null);
  } finally { f.dom.window.close(); }
 });
