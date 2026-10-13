@@ -1746,7 +1746,7 @@ ${createUiV3({ language: this._lang }).css}
         .log-success { background: rgba(16, 185, 129, 0.08); color: #065f46; }
         .log-error { background: rgba(239, 68, 68, 0.08); color: #991b1b; }
         .log-info { background: rgba(59, 130, 246, 0.06); color: #1e40af; }
-        .log-time { font-weight: 600; margin-right: 8px; opacity: 0.6; }
+        .log-time { font-weight: 600; margin-right: 8px; color: var(--bento-text-secondary); opacity: 1; }
 
         /* LS Keys */
         .keys-section {
