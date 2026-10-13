@@ -103,7 +103,7 @@ for (const spec of editors) {
           assert.equal(f.root.activeElement, field);
           assert.equal(field.value, 'alpha omega');
           assert.deepEqual([field.selectionStart, field.selectionEnd, field.selectionDirection], [1, 6, 'backward']);
-          if (true) assert.equal(f.root.querySelector('label[for="cf_title"]').textContent, language === 'en' ? 'Title' : 'Tytuł');
+          assert.equal(f.root.querySelector('label[for="cf_title"]').textContent, language === 'en' ? 'Title' : 'Tytuł');
           if (spec.card === 'ha-purge-cache') assert.match(f.root.getElementById('cf_inspect_label').textContent, language === 'en' ? /Inspect cache/ : /Sprawdzaj/);
         }
         assert.equal(f.events.length, 0);

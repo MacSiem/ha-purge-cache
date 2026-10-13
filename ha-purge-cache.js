@@ -2139,26 +2139,53 @@ class HaPurgeCacheEditor extends HTMLElement {
     this._config = { ...config };
     this._render();
   }
-  set hass(hass) { this._lang = String(hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en'; this._render(); }
+  set hass(hass) {
+    this._hass = hass;
+    this._lang = String(hass?.locale?.language || hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en';
+    this._render();
+  }
   _dispatch() {
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this._config }, bubbles: true, composed: true }));
   }
+  _syncFields() {
+    this.shadowRoot.querySelector('label[for="cf_title"]').textContent=this._lang==='pl'?'Tytuł':'Title';
+    const values = { title: this._config.title ?? 'Purge Cache' };
+    for (const [key, value] of Object.entries(values)) {
+      const field = this.shadowRoot.getElementById('cf_' + key);
+      const next = String(value);
+      if (field.value === next) continue;
+      // Keep the node and selection when HA echoes or replaces the configuration.
+      const selection = this.shadowRoot.activeElement === field
+        ? [field.selectionStart, field.selectionEnd, field.selectionDirection] : null;
+      field.value = next;
+      if (selection) field.setSelectionRange(...selection);
+    }
+    this.shadowRoot.getElementById('cf_inspect_cache_entries').checked = this._config.inspect_cache_entries !== false;
+    this.shadowRoot.getElementById('cf_inspect_label').textContent = this._lang === 'pl' ? 'Sprawdzaj liczbę wpisów w cache' : 'Inspect cache entry counts';
+    this.shadowRoot.getElementById('cf_inspect_hint').textContent = this._lang === 'pl' ? 'Kontrola otwiera istniejące cache. Cache usunięty równolegle może zostać utworzony ponownie. Wyłącz, aby odczytywać wyłącznie liczbę cache.' : 'Inspection opens existing caches. A cache deleted concurrently may be created again. Turn off to read cache counts only.';
+  }
   _render() {
+    if (this.shadowRoot.getElementById('cf_title')) {
+      this._syncFields();
+      return;
+    }
     this.shadowRoot.innerHTML = `
       <style>
             :host { display:block; padding:16px; }
             h3 { margin:0 0 16px; font-size:15px; font-weight:600; color:var(--bento-text, var(--primary-text-color,#1e293b)); }
-            input { outline:none; transition:border-color .2s; }
-            input:focus { border-color:var(--bento-primary, var(--primary-color,#3b82f6)); }
+            input { min-height:44px; box-sizing:border-box; outline:none; transition:border-color .2s; }
+            input:focus-visible { outline:3px solid var(--primary-color,#3b82f6); outline-offset:2px; }
+              input[type="checkbox"] { flex:0 0 44px; }
+              input:focus { border-color:var(--bento-primary, var(--primary-color,#3b82f6)); }
         </style>
       <h3>Purge Cache</h3>
             <div style="margin-bottom:12px;">
               <label for="cf_title" style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;">Title</label>
-              <input type="text" id="cf_title" value="${_esc(this._config?.title || 'Purge Cache')}"
+              <input type="text" id="cf_title" value="${_esc(this._config?.title ?? 'Purge Cache')}"
                 style="width:100%;padding:8px 12px;border:1px solid var(--divider-color,#e2e8f0);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#1e293b);font-size:14px;box-sizing:border-box;">
             </div>
-      <label style="display:flex;gap:8px;align-items:center;min-height:44px;font-size:13px"><input id="cf_inspect_cache_entries" type="checkbox" style="width:44px;height:44px" ${this._config.inspect_cache_entries !== false ? 'checked' : ''}>${this._lang === 'pl' ? 'Sprawdzaj liczbę wpisów w cache' : 'Inspect cache entry counts'}</label>
-      <p style="font-size:12px;line-height:1.5">${this._lang === 'pl' ? 'Kontrola otwiera istniejące cache. Cache usunięty równolegle może zostać utworzony ponownie. Wyłącz, aby odczytywać wyłącznie liczbę cache.' : 'Inspection opens existing caches. A cache deleted concurrently may be created again. Turn off to read cache counts only.'}</p>
+      <label style="display:flex;gap:8px;align-items:center;min-height:44px;font-size:13px"><input id="cf_inspect_cache_entries" aria-describedby="cf_inspect_hint" type="checkbox" style="width:44px;height:44px" ${this._config.inspect_cache_entries !== false ? 'checked' : ''}><span id="cf_inspect_label">${this._lang === 'pl' ? 'Sprawdzaj liczbę wpisów w cache' : 'Inspect cache entry counts'}</span></label>
+      <p id="cf_inspect_hint" style="font-size:12px;line-height:1.5">${this._lang === 'pl' ? 'Kontrola otwiera istniejące cache. Cache usunięty równolegle może zostać utworzony ponownie. Wyłącz, aby odczytywać wyłącznie liczbę cache.' : 'Inspection opens existing caches. A cache deleted concurrently may be created again. Turn off to read cache counts only.'}</p>
     `;
         this.shadowRoot.querySelector('#cf_inspect_cache_entries').addEventListener('change', event => { this._config = {...this._config, inspect_cache_entries:event.target.checked}; this._dispatch(); });
         const f_title = this.shadowRoot.querySelector('#cf_title');
@@ -2166,6 +2193,7 @@ class HaPurgeCacheEditor extends HTMLElement {
           this._config = { ...this._config, title: e.target.value };
           this._dispatch();
         });
+    this._syncFields();
   }
   connectedCallback() { this._render(); }
 }
